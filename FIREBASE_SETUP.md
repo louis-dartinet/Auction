@@ -2,13 +2,14 @@
 
 The new app uses your existing pufferfish-conquest Firebase project, with a separate `deepwokenV2` data path. It does not migrate or overwrite the old auction data.
 
-1. In Firebase Console, open Authentication → Sign-in method. Enable Google and select your support email. Save.
-2. Under Authentication → Settings → Authorized domains, add `louis-dartinet.github.io` if you use GitHub Pages. If using a different host, add its hostname instead. Sign-in must run on an HTTP(S) website, not an HTML file opened directly from your Downloads folder.
-3. Under Realtime Database → Rules, replace the expired test rules with the complete contents of `database.rules.json`, then Publish. The rules enable only the new auction paths; unrelated existing paths remain inaccessible.
-4. Open the new auction website and choose Continue with Google. Open Host access and copy the displayed account UID.
-5. In Realtime Database → Data, add a top-level object `auctionHosts`. Under it, add your exact UID as the key and the Boolean value `true` (not the text "true"). Only project administrators using the console can grant this permission. Do not add anyone else's UID unless you want them to have full control of the draft.
-6. Reload the auction website, sign in if needed, then Host access → Initialise draft.
-7. Friends sign in with Google, request a captain name, and wait for you to approve the request on the host dashboard. Up to six captains receive 30,000 notes each. They can resume the same seat on another device by signing in with the same Google account.
+1. In Firebase Console, open Authentication → Sign-in method. Enable Anonymous and Save. Players will never see a sign-in form, password prompt, email verification, or Google popup. Firebase creates a browser identity silently.
+2. Under Realtime Database → Rules, replace the expired test rules with the complete contents of `database.rules.json`, then Publish. The rules enable only the new auction paths; unrelated existing paths remain inaccessible.
+3. Open the auction at https://louis-dartinet.github.io/Auction/. Open Host access and copy the displayed host browser ID.
+4. In Realtime Database → Data, add a top-level object `auctionHosts`. Under it, add your exact browser ID as the key and the Boolean value `true` (not the text "true"). Only project administrators using the console can grant this permission.
+5. Reload the auction website, then Host access → Initialise draft.
+6. Friends open the website, enter a captain name, and wait for you to approve the request on the host dashboard. Up to six captains receive 30,000 notes each. They resume their seat automatically in the same browser.
+
+Anonymous IDs belong to the browser. Clearing site data, switching browser/device, or using a new private window creates a different ID, so the existing seat or host permission will not follow automatically. The project owner can grant a new host browser ID through Firebase Console. Keep the host browser's site data intact during the event.
 
 ## Running the draft
 
@@ -20,6 +21,6 @@ Pause, undo the latest bid, restart the round, skip unsold lots, reopen skipped 
 
 ## Validation and deployment
 
-The browser configuration is public Firebase web configuration, not a service-account credential. Rules and Google sign-in enforce permissions. No service-account private key is required in this app.
+The browser configuration is public Firebase web configuration, not a service-account credential. Rules and anonymous browser IDs enforce permissions. No service-account private key is required in this app.
 
-The Firebase console was not accessible from the agent's browser, so the live rules and Authentication provider have not been changed, and no live end-to-end Firebase test was possible. Tests simulate transactions and rule predicates locally; publish the rules and verify two signed-in accounts before your event. The GitHub draft pull request must be reviewed/merged before the updated file is deployed by your Pages setup.
+The Firebase console was not accessible from the agent's browser, so the live rules and Authentication provider have not been changed, and no live end-to-end Firebase test was possible. Tests simulate transactions and rule predicates locally; publish the rules and verify two separate browser sessions before your event. GitHub Pages deploys the updated HTML from the main branch.
