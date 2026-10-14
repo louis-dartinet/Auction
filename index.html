@@ -279,6 +279,7 @@ h1,h2,.hero-name{font-family:var(--font-display);font-weight:500;letter-spacing:
 .bid-history{max-width:430px;margin:22px auto 0;text-align:left;border-top:1px solid #a8ad96;padding-top:14px;}.history-row{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;border-bottom:1px solid #afb49e55;}.history-row span{color:#59614d;}.history-row b{font-variant-numeric:tabular-nums;}.admin-actions{flex-wrap:wrap;}.top{background:#121c1d;color:#e2e3d4;}.top .lot-count,.top h1{color:#e2e3d4;}.setup-banner{color:#465340!important;background:#cad0b9!important;border-color:#8c977c!important;}.roster-col{background:#e5e6d7!important;}.bidder-row.me{background:#bdc8ac!important;}input,select{color:#232b21!important;background:#f0f0e5!important;border-color:#9ba58c!important;}input::placeholder{color:#7a806d;}.hint{color:#606852;}.col-heading{color:#46553c;}.lot-row.active{background:#b9c5a6;}.value{color:#33472c!important;}.frame .fallback{background:#b5bfa5;color:#33452f;}.toast{background:#202d23!important;color:#e8eadc!important;}.gate-card .sigil{margin-bottom:22px;}
 @media(max-width:700px){.gate-card{padding:26px!important;margin:16px;}.hero-wrap{padding:20px;border-width:6px;}.clock-head strong{font-size:34px;}.layout{gap:16px;}.queue-col{max-height:260px;overflow:auto;}}
 
+.queue-avatar{width:30px;height:30px;object-fit:cover;border:1px solid #879478;flex-shrink:0;}#robloxTarget{min-width:0;flex:1;}#robloxIdInput{width:100%;}.gate-card input[readonly]{width:100%;font-family:monospace;margin:10px 0;}.gate-card .btn-sm{margin-bottom:12px;}
 </style>
 </head>
 <body>
@@ -433,22 +434,57 @@ async function fetchJSON(url, opts){
   if(!res.ok) throw new Error("HTTP "+res.status);
   return res.json();
 }
-async function resolveOneUserId(username){
-  try{
-    const data = await fetchJSON("https://users.roblox.com/v1/users/search?keyword="+encodeURIComponent(username)+"&limit=10");
-    if(data && Array.isArray(data.data) && data.data.length){
-      const exact = data.data.find(u => (u.name||"").toLowerCase() === username.toLowerCase());
-      return (exact || data.data[0]).id;
-    }
-  }catch(e){ /* swallow - handled by caller via null */ }
-  return null;
+function parseRobloxId(value){
+ const text=String(value||'').trim();
+ const match=text.match(/^(?:https?:\/\/(?:www\.)?roblox\.com\/users\/)?([1-9][0-9]*)(?:\/profile\/?(?:[?#].*)?)?$/i);
+ const id=match?Number(match[1]):NaN;
+ if(!Number.isSafeInteger(id)||id<=0)throw Error('Enter a numeric Roblox user ID or a Roblox profile link.');
+ return id;
 }
-async function resolveAvatarsIfNeeded(){
-  // External Roblox avatar fetching is not configured; initials are shown.
-  return;
+async function lookupRobloxUser(id){
+ try{
+  const user=await fetchJSON('/api/roblox/user/'+id,{signal:AbortSignal.timeout(12000)});
+  if(user.id!==id||typeof user.name!=='string'||!user.name)throw Error('Invalid Roblox user response.');
+  return user;
+ }catch(err){
+  if(err.message==='HTTP 404')throw Error('That Roblox user was not found, or the Netlify proxy is missing. Upload the complete site folder.');
+  throw Error('Roblox lookup failed. Upload the complete Netlify folder with _redirects, then try again.');
+ }
 }
+async function lookupRobloxAvatar(id){
+ try{
+  const result=await fetchJSON('/api/roblox/avatar?userIds='+id+'&size=420x420&format=Png&isCircular=false',{signal:AbortSignal.timeout(12000)});
+  const thumbnail=result.data?.find(x=>Number(x.targetId)===id);
+  if(thumbnail?.state==='Completed'&&typeof thumbnail.imageUrl==='string'){
+   const url=new URL(thumbnail.imageUrl);
+   if(url.protocol==='https:'&&(url.hostname==='rbxcdn.com'||url.hostname.endsWith('.rbxcdn.com')))return url.href;
+  }
+ }catch(err){console.warn('Roblox avatar temporarily unavailable');}
+ return null;
+}
+function refreshRobloxSelect(){
+ const sel=document.getElementById('robloxTarget');if(!sel)return;
+ const value=sel.value;
+ sel.innerHTML='<option value="">Add fighter / match existing username</option>'+state.players.filter(p=>(p.status==='pending'||p.status==='active')&&!p.audit).map(p=>'<option value="'+p.id+'">Lot '+(p.id+1)+' · '+esc(p.username)+'</option>').join('');
+ if([...sel.options].some(x=>x.value===value))sel.value=value;
+}
+function installRobloxUser(model,user,avatar,target){
+ const duplicate=model.players.find(p=>p.robloxId===user.id);
+ let existing=target===''?model.players.find(p=>p.username.toLowerCase()===user.name.toLowerCase()):model.players.find(p=>p.id===Number(target));
+ if(duplicate&&(!existing||duplicate.id!==existing.id))throw Error('This Roblox user is already in the draft.');
+ if(target!==''&&!existing)throw Error('That lot no longer exists.');
+ if(existing){
+  if(!['active','pending'].includes(existing.status)||existing.audit||existing.roundState==='running')throw Error('Only unbid lots can be edited.');
+  Object.assign(existing,{username:user.name,robloxId:user.id,avatarUrl:avatar});
+ }else{
+  const id=model.players.reduce((n,p)=>Math.max(n,p.id),-1)+1;
+  model.players.push({id,username:user.name,robloxId:user.id,avatarUrl:avatar,status:'pending',currentBid:0,highestBidder:null,soldPrice:null,soldTo:null,roundState:'ready',audit:'',openingBid:model.meta.startingBid});
+ }
+}
+async function resolveAvatarsIfNeeded(){return;}
 
 /* ============================= DERIVED HELPERS ============================= */
+function lotTotal(){return state.players.length||USERNAMES.length;}
 function activePlayer(){ return state.players.find(p=>p.status==="active") || null; }
 function soldPlayers(){ return state.players.filter(p=>p.status==="sold"); }
 function pendingPlayers(){ return state.players.filter(p=>p.status==="pending"); }
@@ -482,10 +518,10 @@ function heroMarkup(role){
   if(!p){
     const done = pendingPlayers().length===0;
     return '<div class="empty-hero"><div class="sigil"></div><h2>'+(done?"The ledger is closed":"No lot selected")+'</h2>'+
-      '<p>'+(done?"All 42 fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
+      '<p>'+(done?"All fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
   }
   const lotNum = p.id+1;
-  let html = '<div class="lot-label">Lot '+lotNum+' of '+USERNAMES.length+'</div>';
+  let html = '<div class="lot-label">Lot '+lotNum+' of '+lotTotal()+'</div>';
   html += avatarFrame(p, !!p.highestBidder);
   html += '<h2 class="hero-name">'+esc(p.username)+'</h2>'+clockMarkup(p);
   html += '<div class="bid-figures">'+
@@ -501,7 +537,7 @@ function queueMarkup(clickable){
     const cls = p.status==="sold" ? "sold" : p.status==="skipped" ? "skipped" : p.status==="active" ? "active" : "";
     const click = clickable && p.status==="pending" ? ' clickable" data-action="admin-select-lot" data-id="'+p.id+'"' : '"';
     html += '<div class="lot-row '+cls+click+'>'+
-      '<span class="num">'+(p.id+1)+'</span><span class="name">'+esc(p.username)+'</span></div>';
+      '<span class="num">'+(p.id+1)+'</span>'+(p.avatarUrl?'<img class="queue-avatar" src="'+esc(p.avatarUrl)+'" alt="" loading="lazy" />':'')+'<span class="name">'+esc(p.username)+'</span></div>';
   });
   return html;
 }
@@ -559,9 +595,11 @@ function render(){
   else if(state.screen === "bidder-join") app.innerHTML = bidderJoinScreen();
   else if(state.screen === "bidder-view") app.innerHTML = bidderViewScreen();
   attachOnce();
+  refreshRobloxSelect();
 }
 
 function rerenderDynamic(){
+  refreshRobloxSelect();
   const requestsEl=document.getElementById("requestsBox");if(requestsEl)requestsEl.innerHTML=requestsMarkup();
   if(state.screen === "admin-dashboard"){
     const heroEl = document.getElementById("heroBox"); if(heroEl) heroEl.innerHTML = heroMarkup("admin");
@@ -590,7 +628,7 @@ function remainingCountText(){
 
 function lotCountText(){
   const p = activePlayer();
-  return p ? ("Lot "+(p.id+1)+" of "+USERNAMES.length) : (pendingPlayers().length===0 ? "Auction complete" : "Awaiting next lot");
+  return p ? ("Lot "+(p.id+1)+" of "+lotTotal()) : (pendingPlayers().length===0 ? "Auction complete" : "Awaiting next lot");
 }
 
 function refreshAssignSelect(){
@@ -620,7 +658,7 @@ function roleSelectScreen(){
  return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Build your winning roster.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>No sign-up needed</span></div><div class="setup-banner">'+esc(setupError||(!ready?"Connecting to the draft…":connected?"Enter a captain name to join.":"Reconnecting…"))+'</div><div class="stack"><button class="btn btn-gold" data-action="goto-bidder-join" '+(!ready?'disabled':'')+'>Join as captain</button><button class="btn" data-action="goto-admin-login" '+(!ready?'disabled':'')+'>Host access</button></div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
 }
 function adminLoginScreen(){
- return '<div class="gate"><div class="gate-card panel"><h1>Host access</h1><p class="tag">'+(isHost?"This browser has host permission.":"Grant this browser ID host access in Firebase to use these controls.")+'</p><p class="hint">Your host browser ID</p><input readonly aria-label="Your host browser ID" value="'+esc(currentUser?.uid||"")+'" /><button class="btn btn-gold" data-action="submit-admin-login" '+(!isHost?'disabled':'')+'>'+(state.loaded?'Open dashboard':'Initialise draft')+'</button><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
+ return '<div class="gate"><div class="gate-card panel"><h1>Host access</h1><p class="tag">'+(isHost?"This browser has host permission.":"Grant this browser ID host access in Firebase to use these controls.")+'</p><p class="hint">The host can run rounds, undo bids, manage fighters and approve captains. To enable this browser: publish the supplied rules, then add auctionHosts → your full ID → Boolean true in Firebase Database → Data.</p><p class="hint">Your host browser ID</p><input readonly aria-label="Your host browser ID" value="'+esc(currentUser?.uid||"")+'" /><button class="btn btn-sm" data-action="copy-host-id">Copy browser ID</button><button class="btn btn-gold" data-action="submit-admin-login" '+(!isHost?'disabled':'')+'>'+(state.loaded?'Open dashboard':'Initialise draft')+'</button><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
 }
 function bidderJoinScreen(){
  const mine=Object.entries(state.bidders).find(([name,b])=>b.uid===currentUser?.uid);
@@ -638,7 +676,7 @@ function adminDashboardScreen(){
     '<div class="setup-banner" style="margin:14px auto;max-width:1300px">Keep this host dashboard open: bids close at the shared deadline; this dashboard records sales automatically.</div>' +
     '<main class="layout">'+
       '<aside class="queue-col"><div class="col-heading" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'+
-        '<span>Lots — '+USERNAMES.length+' total</span>'+
+        '<span>Lots — '+lotTotal()+' total</span>'+
         '<button class="btn btn-ghost btn-sm" id="entrantsToggleBtn" style="width:auto;padding:4px 10px;" data-action="admin-toggle-entrants">'+(state.hideEntrants?"Show":"Hide")+'</button>'+
         '</div>'+
         '<div class="queue-scroll" id="queueBox">'+queueBoxMarkup()+'</div></aside>'+
@@ -656,6 +694,7 @@ function adminDashboardScreen(){
 
 function adminPanelMarkup(){
   return '<div class="admin-actions" style="margin-bottom:18px"><button class="btn btn-gold" data-action="round-start">Start / resume</button><button class="btn" data-action="round-pause">Pause</button><button class="btn" data-action="round-undo">Undo last bid</button><button class="btn" data-action="round-restart">Restart round</button><button class="btn" data-action="export-results">Export results</button></div>'+ '<div class="admin-panel panel">'+
+    '<div class="col-heading">Manage fighters</div><div class="field"><label for="robloxIdInput">Roblox user ID or profile link</label><input id="robloxIdInput" placeholder="123456789 or roblox.com/users/…/profile" /></div><div class="row"><select id="robloxTarget" aria-label="Lot to add or update"></select><button class="btn btn-gold btn-sm" data-action="add-roblox-user">Add / update fighter</button></div><p class="hint">Find the user ID in their Roblox profile URL. Existing usernames are matched automatically.</p><button class="btn btn-sm" data-action="refresh-roblox-avatar">Refresh current avatar</button><div class="divider-flourish"></div>'+ 
     '<div class="row">'+
       '<input id="startingBidInput" type="number" min="0" placeholder="Opening bid for next lot" aria-label="Opening bid for next lot" value="'+state.meta.startingBid+'" />'+
       '<button class="btn btn-sm" data-action="admin-set-starting-bid">Set</button>'+
@@ -705,6 +744,7 @@ function topBar(role){
 let delegated=false,busy=false;
 function attachOnce(){
  if(delegated)return;delegated=true;
+ document.addEventListener('error',e=>{const img=e.target;if(img.tagName!=='IMG')return;if(img.classList.contains('queue-avatar')){img.remove();return;}const fallback=document.createElement('div');fallback.className='fallback';fallback.textContent=initials(img.alt||'?');img.replaceWith(fallback);},true);
  document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-action]');if(!el||el.disabled)return;e.preventDefault();
   const action=el.dataset.action;
@@ -714,14 +754,27 @@ function attachOnce(){
 }
 function friendlyError(err){
  const code=String(err.code||err.message||'');
+ if(code.includes('configuration-not-found'))return 'Enable Anonymous in Firebase Authentication → Sign-in method.';
  if(code.includes('operation-not-allowed'))return 'Enable Anonymous in Firebase Authentication → Sign-in method.';
- if(code.toLowerCase().includes('permission_denied')||code.includes('permission-denied'))return 'Firebase rejected this action. Check the new database rules and your host permission.';
+ if(code.toLowerCase().includes('permission_denied')||code.includes('permission-denied')||code.toLowerCase().includes('permission denied'))return 'Firebase rejected this action. Check the new database rules and your host permission.';
  return err.message||'Could not complete that action.';
 }
 async function handleAction(action,el){
  if(action==='goto-role-select'){state.screen='role-select';render();return;}
  if(action==='goto-admin-login'){state.screen='admin-login';render();return;}
  if(action==='goto-bidder-join'){state.screen='bidder-join';render();return;}
+ if(action==='copy-host-id'){await navigator.clipboard.writeText(currentUser.uid);showToast('Host browser ID copied.');return;}
+ if(action==='add-roblox-user'){
+  hostRequired();const id=parseRobloxId(document.getElementById('robloxIdInput').value),target=document.getElementById('robloxTarget').value;
+  const user=await lookupRobloxUser(id),avatar=await lookupRobloxAvatar(id);
+  await hostMutate(model=>installRobloxUser(model,user,avatar,target));
+  document.getElementById('robloxIdInput').value='';showToast(avatar?'Fighter saved with Roblox avatar.':'Fighter saved. Avatar is unavailable; try Refresh current avatar later.');return;
+ }
+ if(action==='refresh-roblox-avatar'){
+  hostRequired();const p=activePlayer();if(!p?.robloxId)throw Error('The current fighter needs a Roblox user ID first.');
+  const avatar=await lookupRobloxAvatar(p.robloxId);if(!avatar)throw Error('Roblox has not returned an avatar yet. Try again later.');
+  await hostMutate(model=>{const lot=model.players.find(x=>x.id===p.id);if(!lot||lot.robloxId!==p.robloxId)throw Error('The fighter changed. Try again.');lot.avatarUrl=avatar;});return;
+ }
  if(action==='submit-admin-login'){
   hostRequired();
   const initial=encode(initialiseModel());
@@ -772,7 +825,7 @@ async function handleAction(action,el){
   }
   if(action==='toggle-registration'){model.meta.registrationOpen=!model.meta.registrationOpen;return;}
   if(action==='admin-reset-auction'){
-   model.players=initialiseModel().players;model.meta.startingBid=100;reconcile(model);return;
+   model.players=model.players.map((p,i)=>{const clean={id:p.id,username:p.username,robloxId:p.robloxId||null,avatarUrl:p.avatarUrl||null,status:i===0?'active':'pending',currentBid:i===0?100:0,highestBidder:null,soldPrice:null,soldTo:null,roundState:'ready',audit:'',openingBid:100};return clean;});model.meta.startingBid=100;reconcile(model);return;
   }
   if(action==='admin-select-lot'||action==='admin-next-lot'){
    if(p)throw Error('Finish or skip the current lot first.');
