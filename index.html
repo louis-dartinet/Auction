@@ -616,10 +616,11 @@ function refreshQuickBidButtons(){
 }
 
 function roleSelectScreen(){
- return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Build your winning roster.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>Live Firebase bids</span></div><div class="setup-banner">'+esc(setupError||(!currentUser?"Sign in to join the live draft.":connected?"Connected to the shared draft.":"Connecting…"))+'</div><div class="stack">'+(!currentUser?'<button class="btn btn-gold" data-action="sign-in">Continue with Google</button>':'<button class="btn btn-gold" data-action="goto-bidder-join">Join as captain</button><button class="btn" data-action="goto-admin-login">Host access</button><button class="btn" data-action="sign-out">Sign out</button>')+'</div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
+ const ready=!!currentUser;
+ return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Build your winning roster.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>No sign-up needed</span></div><div class="setup-banner">'+esc(setupError||(!ready?"Connecting to the draft…":connected?"Enter a captain name to join.":"Reconnecting…"))+'</div><div class="stack"><button class="btn btn-gold" data-action="goto-bidder-join" '+(!ready?'disabled':'')+'>Join as captain</button><button class="btn" data-action="goto-admin-login" '+(!ready?'disabled':'')+'>Host access</button></div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
 }
 function adminLoginScreen(){
- return '<div class="gate"><div class="gate-card panel"><h1>Host access</h1><p class="tag">'+(isHost?"Your account has host permission.":"Ask the project owner to grant this account host access in Firebase.")+'</p><p class="hint">Your account UID</p><input readonly aria-label="Your account UID" value="'+esc(currentUser?.uid||"")+'" /><button class="btn btn-gold" data-action="submit-admin-login" '+(!isHost?'disabled':'')+'>'+(state.loaded?'Open dashboard':'Initialise draft')+'</button><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
+ return '<div class="gate"><div class="gate-card panel"><h1>Host access</h1><p class="tag">'+(isHost?"This browser has host permission.":"Grant this browser ID host access in Firebase to use these controls.")+'</p><p class="hint">Your host browser ID</p><input readonly aria-label="Your host browser ID" value="'+esc(currentUser?.uid||"")+'" /><button class="btn btn-gold" data-action="submit-admin-login" '+(!isHost?'disabled':'')+'>'+(state.loaded?'Open dashboard':'Initialise draft')+'</button><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
 }
 function bidderJoinScreen(){
  const mine=Object.entries(state.bidders).find(([name,b])=>b.uid===currentUser?.uid);
@@ -713,16 +714,11 @@ function attachOnce(){
 }
 function friendlyError(err){
  const code=String(err.code||err.message||'');
- if(code.includes('unauthorized-domain'))return 'Add this website domain to Firebase Authentication → Settings → Authorized domains.';
- if(code.includes('operation-not-allowed'))return 'Enable Google sign-in in Firebase Authentication first.';
+ if(code.includes('operation-not-allowed'))return 'Enable Anonymous in Firebase Authentication → Sign-in method.';
  if(code.toLowerCase().includes('permission_denied')||code.includes('permission-denied'))return 'Firebase rejected this action. Check the new database rules and your host permission.';
- if(code.includes('popup-blocked'))return 'Allow the Google sign-in popup, then try again.';
- if(code.includes('popup-closed'))return 'Sign-in cancelled.';
  return err.message||'Could not complete that action.';
 }
 async function handleAction(action,el){
- if(action==='sign-in'){await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());return;}
- if(action==='sign-out'){await auth.signOut();return;}
  if(action==='goto-role-select'){state.screen='role-select';render();return;}
  if(action==='goto-admin-login'){state.screen='admin-login';render();return;}
  if(action==='goto-bidder-join'){state.screen='bidder-join';render();return;}
@@ -734,7 +730,7 @@ async function handleAction(action,el){
   state.screen='admin-dashboard';render();return;
  }
  if(action==='signup-auctioneer'){
-  if(!currentUser||!connected)throw Error('Sign in and wait for the connection.');
+  if(!currentUser||!connected)throw Error('Wait for the live connection.');
   if(!state.loaded||!state.meta.registrationOpen)throw Error('The host has not opened captain signups yet.');
   const name=document.getElementById('auctioneerNameInput').value.trim();
   if(!/^[A-Za-z0-9 _-]{1,30}$/.test(name)||['__proto__','constructor','prototype'].includes(name))throw Error('Use 1–30 letters, numbers, spaces, underscores or hyphens.');
@@ -762,7 +758,7 @@ async function handleAction(action,el){
  if(action==='admin-toggle-entrants'){state.hideEntrants=!state.hideEntrants;rerenderDynamic();const btn=document.getElementById('entrantsToggleBtn');if(btn)btn.textContent=state.hideEntrants?'Show':'Hide';return;}
  if(action==='bidder-quick-bid'){await submitBid(Number(el.dataset.amt));return;}
  if(action==='bidder-custom-bid'){await submitBid(Number(document.getElementById('customBidderAmt').value));return;}
- if(action==='admin-set-bid'){throw Error('Captains submit their own bids from their signed-in accounts.');}
+ if(action==='admin-set-bid'){throw Error('Captains submit their own bids from their browser.');}
  const opening=Number(document.getElementById('startingBidInput')?.value||0);
  if(action==='admin-reset-auction'&&!confirm('Reset this draft? Captains keep their seats; all picks and bids are cleared. Export results first.'))return;
  if(action==='round-restart'&&!confirm('Clear this lot’s bids and reset its clock to 20 seconds?'))return;
@@ -854,7 +850,11 @@ async function init(){
   auth.onAuthStateChanged(async user=>{
    if(unsubSession){unsubSession();unsubSession=null;}
    currentUser=user;isHost=false;requests={};state.players=[];state.bidders={};state.meta={};state.loaded=false;state.bidderName=null;state.screen='role-select';setupError='';
-   if(!user){render();return;}
+   if(!user){
+    render();
+    try{await auth.signInAnonymously();}catch(err){setupError=friendlyError(err);render();}
+    return;
+   }
    try{
     isHost=(await db.ref('auctionHosts/'+user.uid).get()).val()===true;
     const sessionHandler=snap=>{
