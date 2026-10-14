@@ -24,3 +24,11 @@ Pause, undo the latest bid, restart the round, skip unsold lots, reopen skipped 
 The browser configuration is public Firebase web configuration, not a service-account credential. Rules and anonymous browser IDs enforce permissions. No service-account private key is required in this app.
 
 The Firebase console was not accessible from the agent's browser, so the live rules and Authentication provider have not been changed, and no live end-to-end Firebase test was possible. Tests simulate transactions and rule predicates locally; publish the rules and verify two separate browser sessions before your event. GitHub Pages deploys the updated HTML from the main branch.
+
+## Roblox fighters on Netlify
+
+Deploy the complete folder containing index.html and _redirects, rather than just the HTML file. The supplied deepwoken-netlify.zip contains those two files at its root; extract it and upload the extracted folder to your existing Netlify project. The proxy routes let the browser retrieve public Roblox profile information and avatars without a third-party CORS service or Roblox login.
+
+On the host dashboard, enter a numeric Roblox user ID or profile URL, then Add / update fighter. The real Roblox username and headshot are fetched automatically. The default option matches an existing username or adds a new pending lot; alternatively, choose an unbid lot to update. Duplicate user IDs are rejected. If Roblox has not generated a thumbnail or blocks it, initials appear and the host can retry Refresh current avatar. Resetting the draft retains configured fighter names, Roblox IDs, and avatars.
+
+Avatars require the Netlify proxy: GitHub Pages alone does not implement _redirects. Live Roblox/Netlify lookup has not been verified from the agent browser.
