@@ -14,10 +14,6 @@ Open the GitHub Pages URL, select **Open demo host dashboard**, or **Join demo a
 - Responsive interface
 - Local browser persistence for demonstrations
 
-## Deploy to GitHub Pages
-
-Upload `index.html` and `README.md` to a public repository. Under **Settings → Pages**, choose **Deploy from a branch**, `main`, and `/ (root)`.
-
 ## Limitations
 
 This is a portfolio demo, not a secured multiplayer auction. It has no authentication or remote database. The original live implementation would require authenticated access, Firebase security rules, and transactional bidding before public use.
