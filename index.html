@@ -280,6 +280,7 @@ h1,h2,.hero-name{font-family:var(--font-display);font-weight:500;letter-spacing:
 @media(max-width:700px){.gate-card{padding:26px!important;margin:16px;}.hero-wrap{padding:20px;border-width:6px;}.clock-head strong{font-size:34px;}.layout{gap:16px;}.queue-col{max-height:260px;overflow:auto;}}
 
 .queue-avatar{width:30px;height:30px;object-fit:cover;border:1px solid #879478;flex-shrink:0;}#robloxTarget{min-width:0;flex:1;}#robloxIdInput{width:100%;}.gate-card input[readonly]{width:100%;font-family:monospace;margin:10px 0;}.gate-card .btn-sm{margin-bottom:12px;}
+.manager-tools{margin:16px 0 24px;border:1px solid #a1aa91;padding:14px;text-align:left;}.manager-tools>summary{cursor:pointer;font-weight:600;padding:4px;}.manager-list,.import-list{max-height:320px;overflow:auto;margin:12px 0;}.manager-row{display:flex;align-items:center;gap:9px;border-bottom:1px solid #a6af9555;padding:9px 0;}.manager-name{flex:1;min-width:0;overflow-wrap:anywhere;}.manager-row small{display:block;color:#5e6855;font-size:11px;}.manager-row .btn{width:auto;margin:0;}.manager-row input[type=checkbox]{width:18px;height:18px;flex-shrink:0;}textarea{width:100%;resize:vertical;background:#f0f0e5;color:#232b21;border:1px solid #9ba58c;padding:12px;font:13px monospace;}@media(max-width:600px){.manager-row{flex-wrap:wrap;}.manager-row .btn{font-size:11px;}.manager-tools{padding:9px;}}
 </style>
 </head>
 <body>
@@ -293,6 +294,7 @@ h1,h2,.hero-name{font-family:var(--font-display);font-weight:500;letter-spacing:
 
 /* ============================= CONFIG ============================= */
 const STARTING_BUDGET = 30000;
+const MAX_ROSTER_SIZE = 12;
 const FIREBASE_CONFIGURED = true;
 const firebaseConfig = {
  apiKey:"AIzaSyAc4cYZMRnWZFfGsLR3IsnMFShnRrSYorM",
@@ -308,17 +310,7 @@ let db,auth,sessionRef,currentUser=null,isHost=false,connected=false,offset=0,cl
 let requests={},setupError="",unsubSession=null;
 const ROOT="deepwokenV2";
 function serverNow(){return Math.round(Date.now()+offset);}
-const USERNAMES = [
-"whitedevvv","Kon4218","alfeyzzz","shiyrogane","Veiquiro",
-"spawncrystals","rkyc","card","Destroyerheroman","SNKDreazz94",
-"ddmewtwo","vxko","smothercloud","KittyOliviaaaaa",
-"patopizza456","LyonZ17","Arturek7","boundlessslove","migxvs","Drowze_e",
-"crazycarrot455","siilyguyy","RyanMassi2","lIIIlIlllIIIlIlIIIl","predictionmybeloved",
-"raulrivitas123","yustin1234567890","emrikfan18","Apollon0200","tommyleekinn",
-"Franky2","tekivm","DJ_Aswqe","Vymphia","PositiveKevinn","n5ase",
-"g9nklas","Kingdethboyleon","UhhSiiver","Bartek060606","shadow121121121",
-"counted"
-];
+const USERNAMES = [];
 
 // The 6 team captains who will be bidding. They are not part of the auction
 // pool above — this list is only used to build the "Captains' picks" board.
@@ -352,16 +344,7 @@ function shuffledUsernames(){
   return arr;
 }
 
-function defaultPlayers(){
-  const order = shuffledUsernames();
-  return order.map((u,i)=>({
-    id:i, username:u, robloxId:null, avatarUrl:null,
-    status: i===0 ? "active" : "pending",
-    currentBid: i===0 ? 100 : 0,
-    highestBidder: null,
-    soldPrice: null, soldTo: null
-  }));
-}
+function defaultPlayers(){return [];}
 function defaultMeta(){
   return { startingBid: 100, avatarsResolved:false, captains:[] };
 }
@@ -369,7 +352,7 @@ function defaultMeta(){
 function decode(raw){
   const bidders={};
   for(const [uid,b] of Object.entries(raw?.bidders||{}))bidders[b.name]={...b,uid};
-  const players=Object.values(raw?.players||{}).map(p=>({...p,highestBidder:p.highestBidder||null,history:historyFromAudit(p)})).sort((a,b)=>a.id-b.id);
+  const players=Object.values(raw?.players||{}).filter(Boolean).map(p=>({...p,highestBidder:p.highestBidder||null,history:historyFromAudit(p)})).sort((a,b)=>{const order=raw?.meta?.queueOrder||[];const ai=order.indexOf(a.id),bi=order.indexOf(b.id);return (ai<0?1e9+a.id:ai)-(bi<0?1e9+b.id:bi);});
   return {players,meta:{...(raw?.meta||defaultMeta()),captains:Object.keys(bidders)},bidders};
 }
 function encode(model){
@@ -377,7 +360,7 @@ function encode(model){
   for(const p of model.players){const {history,...plain}=p;players[p.id]=plain;}
   for(const [name,b] of Object.entries(model.bidders)){const {uid,won,...plain}=b;bidders[uid]={...plain,name};}
   const {captains,...meta}=model.meta;
-  return JSON.parse(JSON.stringify({players,bidders,meta}));
+  return JSON.parse(JSON.stringify({players,bidders,meta:{...meta,queueOrder:model.players.map(p=>p.id)}}));
 }
 function applyRaw(raw){
   const model=decode(raw);state.players=model.players;state.meta=model.meta;state.bidders=model.bidders;
@@ -402,6 +385,7 @@ async function hostMutate(fn){
     if(!raw){reason="Initialise the draft first.";return;}
     const model=decode(raw);const outcome=fn(model,serverNow());
     if(outcome===false)return;
+    reconcile(model);
     return encode(model);
   },undefined,false);
   if(result.committed)applyRaw(result.snapshot.val());
@@ -412,6 +396,7 @@ function reconcile(model){
   for(const [name,b] of Object.entries(model.bidders)){
     const picks=model.players.filter(p=>p.status==="sold"&&p.soldTo===name);
     b.budget=STARTING_BUDGET-picks.reduce((n,p)=>n+p.soldPrice,0);
+    b.rosterCount=picks.length;
   }
 }
 function initialiseModel(){
@@ -422,7 +407,7 @@ function settle(model,p){
   if(!p||p.status!=="active")return;
   if(p.highestBidder){
     const b=model.bidders[p.highestBidder];
-    if(!b||b.budget<p.currentBid){p.roundState="paused";p.remainingMs=5000;p.endsAt=null;return;}
+    if(!b||b.budget<p.currentBid||model.players.filter(x=>x.status==='sold'&&x.soldTo===p.highestBidder).length>=MAX_ROSTER_SIZE){p.roundState="paused";p.remainingMs=5000;p.endsAt=null;return;}
     p.status="sold";p.soldTo=p.highestBidder;p.soldPrice=p.currentBid;
   }else p.status="skipped";
   p.roundState="closed";p.endsAt=null;reconcile(model);
@@ -465,7 +450,7 @@ async function lookupRobloxAvatar(id){
 function refreshRobloxSelect(){
  const sel=document.getElementById('robloxTarget');if(!sel)return;
  const value=sel.value;
- sel.innerHTML='<option value="">Add fighter / match existing username</option>'+state.players.filter(p=>(p.status==='pending'||p.status==='active')&&!p.audit).map(p=>'<option value="'+p.id+'">Lot '+(p.id+1)+' · '+esc(p.username)+'</option>').join('');
+ sel.innerHTML='<option value="">Add fighter / match existing username</option>'+state.players.filter(p=>(p.status==='pending'||p.status==='active')&&!p.audit).map(p=>'<option value="'+p.id+'">Lot '+lotPosition(p)+' · '+esc(p.username)+'</option>').join('');
  if([...sel.options].some(x=>x.value===value))sel.value=value;
 }
 function installRobloxUser(model,user,avatar,target){
@@ -477,17 +462,19 @@ function installRobloxUser(model,user,avatar,target){
   if(!['active','pending'].includes(existing.status)||existing.audit||existing.roundState==='running')throw Error('Only unbid lots can be edited.');
   Object.assign(existing,{username:user.name,robloxId:user.id,avatarUrl:avatar});
  }else{
-  const id=model.players.reduce((n,p)=>Math.max(n,p.id),-1)+1;
+  const id=allocateFighterId(model);
   model.players.push({id,username:user.name,robloxId:user.id,avatarUrl:avatar,status:'pending',currentBid:0,highestBidder:null,soldPrice:null,soldTo:null,roundState:'ready',audit:'',openingBid:model.meta.startingBid});
  }
 }
 async function resolveAvatarsIfNeeded(){return;}
 
 /* ============================= DERIVED HELPERS ============================= */
-function lotTotal(){return state.players.length||USERNAMES.length;}
+function lotTotal(){return state.players.length;}
+function lotPosition(p){return state.players.findIndex(x=>x.id===p.id)+1;}
 function activePlayer(){ return state.players.find(p=>p.status==="active") || null; }
 function soldPlayers(){ return state.players.filter(p=>p.status==="sold"); }
 function pendingPlayers(){ return state.players.filter(p=>p.status==="pending"); }
+function myRosterCount(){return state.players.filter(p=>p.status==='sold'&&p.soldTo===state.bidderName).length;}
 function myBudget(){ const b = state.bidders[state.bidderName]; return b ? b.budget : STARTING_BUDGET; }
 
 /* ============================= TOAST ============================= */
@@ -518,9 +505,9 @@ function heroMarkup(role){
   if(!p){
     const done = pendingPlayers().length===0;
     return '<div class="empty-hero"><div class="sigil"></div><h2>'+(done?"The ledger is closed":"No lot selected")+'</h2>'+
-      '<p>'+(done?"All fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
+      '<p>'+(state.players.length===0?"Add fighters or import a list to begin.":done?"All fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
   }
-  const lotNum = p.id+1;
+  const lotNum = lotPosition(p);
   let html = '<div class="lot-label">Lot '+lotNum+' of '+lotTotal()+'</div>';
   html += avatarFrame(p, !!p.highestBidder);
   html += '<h2 class="hero-name">'+esc(p.username)+'</h2>'+clockMarkup(p);
@@ -537,7 +524,7 @@ function queueMarkup(clickable){
     const cls = p.status==="sold" ? "sold" : p.status==="skipped" ? "skipped" : p.status==="active" ? "active" : "";
     const click = clickable && p.status==="pending" ? ' clickable" data-action="admin-select-lot" data-id="'+p.id+'"' : '"';
     html += '<div class="lot-row '+cls+click+'>'+
-      '<span class="num">'+(p.id+1)+'</span>'+(p.avatarUrl?'<img class="queue-avatar" src="'+esc(p.avatarUrl)+'" alt="" loading="lazy" />':'')+'<span class="name">'+esc(p.username)+'</span></div>';
+      '<span class="num">'+lotPosition(p)+'</span>'+(p.avatarUrl?'<img class="queue-avatar" src="'+esc(p.avatarUrl)+'" alt="" loading="lazy" />':'')+'<span class="name">'+esc(p.username)+'</span></div>';
   });
   return html;
 }
@@ -573,7 +560,7 @@ function rostersMarkup(){
     const picksHtml = picks.length
       ? picks.map(p=>'<div class="pick"><span class="pn">'+esc(p.username)+'</span><span class="pp">'+fmt(p.soldPrice)+'</span></div>').join("")
       : '<div class="none">No picks yet</div>';
-    return '<div class="roster-col"><div class="cap-name">'+esc(cap)+'</div><div class="cap-budget">'+budgetLine+'</div>'+picksHtml+'</div>';
+    return '<div class="roster-col"><div class="cap-name">'+esc(cap)+'</div><div class="cap-budget">'+budgetLine+' · '+picks.length+'/12 fighters</div>'+picksHtml+'</div>';
   }).join("")+'</div>';
 }
 
@@ -599,6 +586,7 @@ function render(){
 }
 
 function rerenderDynamic(){
+  updateRosterManager();
   refreshRobloxSelect();
   const requestsEl=document.getElementById("requestsBox");if(requestsEl)requestsEl.innerHTML=requestsMarkup();
   if(state.screen === "admin-dashboard"){
@@ -614,7 +602,7 @@ function rerenderDynamic(){
     const rcEl = document.getElementById("remainingCount"); if(rcEl) rcEl.textContent = remainingCountText();
     const sEl = document.getElementById("soldBox"); if(sEl) sEl.innerHTML = soldStripMarkup();
     const bEl = document.getElementById("biddersBox"); if(bEl) bEl.innerHTML = biddersListMarkup(state.bidderName);
-    const purse = document.getElementById("purseVal"); if(purse) purse.textContent = fmt(myBudget())+" notes";
+    const purse = document.getElementById("purseVal"); if(purse) purse.textContent = fmt(myBudget())+" notes · "+myRosterCount()+"/12 fighters";
     const lc = document.getElementById("lotCount"); if(lc) lc.textContent = lotCountText();
     const rEl = document.getElementById("rostersBox"); if(rEl) rEl.innerHTML = rostersMarkup();
     refreshQuickBidButtons();
@@ -628,7 +616,7 @@ function remainingCountText(){
 
 function lotCountText(){
   const p = activePlayer();
-  return p ? ("Lot "+(p.id+1)+" of "+lotTotal()) : (pendingPlayers().length===0 ? "Auction complete" : "Awaiting next lot");
+  return p ? ("Lot "+lotPosition(p)+" of "+lotTotal()) : (pendingPlayers().length===0 ? "Auction complete" : "Awaiting next lot");
 }
 
 function refreshAssignSelect(){
@@ -648,14 +636,14 @@ function refreshQuickBidButtons(){
   const steps = [100,250,500,1000];
   box.innerHTML = steps.map(s=>{
     const amt = p.currentBid + s;
-    const disabled = !connected || !clockReady || amt > budget || p.roundState!=="running" || serverNow()>=p.endsAt || p.highestBidder===state.bidderName;
+    const disabled = myRosterCount()>=MAX_ROSTER_SIZE || !connected || !clockReady || amt > budget || p.roundState!=="running" || serverNow()>=p.endsAt || p.highestBidder===state.bidderName;
     return '<button data-action="bidder-quick-bid" data-amt="'+amt+'" '+(disabled?"disabled":"")+'>+'+s+' → '+fmt(amt)+'</button>';
   }).join("");
 }
 
 function roleSelectScreen(){
  const ready=!!currentUser;
- return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Build your winning roster.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>No sign-up needed</span></div><div class="setup-banner">'+esc(setupError||(!ready?"Connecting to the draft…":connected?"Enter a captain name to join.":"Reconnecting…"))+'</div><div class="stack"><button class="btn btn-gold" data-action="goto-bidder-join" '+(!ready?'disabled':'')+'>Join as captain</button><button class="btn" data-action="goto-admin-login" '+(!ready?'disabled':'')+'>Host access</button></div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
+ return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Up to 12 fighters per team.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>No sign-up needed</span></div><div class="setup-banner">'+esc(setupError||(!ready?"Connecting to the draft…":connected?"Enter a captain name to join.":"Reconnecting…"))+'</div><div class="stack"><button class="btn btn-gold" data-action="goto-bidder-join" '+(!ready?'disabled':'')+'>Join as captain</button><button class="btn" data-action="goto-admin-login" '+(!ready?'disabled':'')+'>Host access</button></div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
 }
 function adminLoginScreen(){
  return '<div class="gate"><div class="gate-card panel"><h1>Host access</h1><p class="tag">'+(isHost?"This browser has host permission.":"Grant this browser ID host access in Firebase to use these controls.")+'</p><p class="hint">The host can run rounds, undo bids, manage fighters and approve captains. To enable this browser: publish the supplied rules, then add auctionHosts → your full ID → Boolean true in Firebase Database → Data.</p><p class="hint">Your host browser ID</p><input readonly aria-label="Your host browser ID" value="'+esc(currentUser?.uid||"")+'" /><button class="btn btn-sm" data-action="copy-host-id">Copy browser ID</button><button class="btn btn-gold" data-action="submit-admin-login" '+(!isHost?'disabled':'')+'>'+(state.loaded?'Open dashboard':'Initialise draft')+'</button><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
@@ -693,8 +681,8 @@ function adminDashboardScreen(){
 }
 
 function adminPanelMarkup(){
-  return '<div class="admin-actions" style="margin-bottom:18px"><button class="btn btn-gold" data-action="round-start">Start / resume</button><button class="btn" data-action="round-pause">Pause</button><button class="btn" data-action="round-undo">Undo last bid</button><button class="btn" data-action="round-restart">Restart round</button><button class="btn" data-action="export-results">Export results</button></div>'+ '<div class="admin-panel panel">'+
-    '<div class="col-heading">Manage fighters</div><div class="field"><label for="robloxIdInput">Roblox user ID or profile link</label><input id="robloxIdInput" placeholder="123456789 or roblox.com/users/…/profile" /></div><div class="row"><select id="robloxTarget" aria-label="Lot to add or update"></select><button class="btn btn-gold btn-sm" data-action="add-roblox-user">Add / update fighter</button></div><p class="hint">Find the user ID in their Roblox profile URL. Existing usernames are matched automatically.</p><button class="btn btn-sm" data-action="refresh-roblox-avatar">Refresh current avatar</button><div class="divider-flourish"></div>'+ 
+  return '<div class="admin-actions" style="margin-bottom:18px"><button class="btn btn-gold" data-action="round-start">Start / resume</button><button class="btn" data-action="round-pause">Pause</button><button class="btn" data-action="add-round-time">+5 seconds</button><button class="btn" data-action="round-undo">Undo last bid</button><button class="btn" data-action="round-restart">Restart round</button><button class="btn" data-action="export-results">Export results</button></div>'+ '<div class="admin-panel panel">'+
+    managementMarkup()+'<div class="col-heading">Add one fighter</div><div class="field"><label for="robloxIdInput">Roblox user ID or profile link</label><input id="robloxIdInput" placeholder="123456789 or roblox.com/users/…/profile" /></div><div class="row"><select id="robloxTarget" aria-label="Lot to add or update"></select><button class="btn btn-gold btn-sm" data-action="add-roblox-user">Add / update fighter</button></div><p class="hint">Find the user ID in their Roblox profile URL. Existing usernames are matched automatically.</p><button class="btn btn-sm" data-action="refresh-roblox-avatar">Refresh current avatar</button><div class="divider-flourish"></div>'+ 
     '<div class="row">'+
       '<input id="startingBidInput" type="number" min="0" placeholder="Opening bid for next lot" aria-label="Opening bid for next lot" value="'+state.meta.startingBid+'" />'+
       '<button class="btn btn-sm" data-action="admin-set-starting-bid">Set</button>'+
@@ -735,15 +723,144 @@ function topBar(role){
   return '<header class="top"><div class="title"><div class="sigil"></div><div><h1>The Deepwoken Draft</h1>'+
     '<div class="lot-count" id="lotCount">'+lotCountText()+'</div></div></div>'+
     '<div class="who">'+
-      (role==="bidder" ? ('<span>'+esc(state.bidderName)+'</span><span class="purse" id="purseVal">'+fmt(myBudget())+' notes</span>') : '<span>Host</span>')+
+      (role==="bidder" ? ('<span>'+esc(state.bidderName)+'</span><span class="purse" id="purseVal">'+fmt(myBudget())+' notes · '+myRosterCount()+'/12 fighters</span>') : '<span>Host</span>')+
       '<button class="btn btn-ghost btn-sm" data-action="goto-role-select">Leave</button>'+
     '</div></header>';
+}
+
+let selectedFighters=new Set(),importPreview=null;
+const ROSTER_FIELDS=['id','username','robloxId','avatarUrl','status','currentBid','highestBidder','highestBidderUid','endsAt','roundState','remainingMs','soldPrice','soldTo','audit','openingBid','previousBid','previousBidder'];
+function rosterSnapshot(players){return players.map(p=>Object.fromEntries(ROSTER_FIELDS.map(k=>[k,p[k]??null])));}
+function rosterFingerprint(players){return JSON.stringify(rosterSnapshot(players));}
+function changeRoster(model,fn){
+ const before=rosterSnapshot(model.players);model.meta.nextPlayerId=Math.max(Number(model.meta.nextPlayerId)||0,model.players.reduce((n,p)=>Math.max(n,p.id),-1)+1);fn();reconcile(model);
+ model.meta.lastRosterChange={before,after:rosterFingerprint(model.players)};
+}
+function undoRosterChange(model){
+ const change=model.meta.lastRosterChange;if(!change)throw Error('There is no list change to undo.');
+ if(rosterFingerprint(model.players)!==change.after)throw Error('Bids or fighter details have changed since that edit. Export results before changing the list again.');
+ model.players=JSON.parse(JSON.stringify(change.before));
+ for(const p of model.players)if(p.status==='active'&&p.roundState==='running'){p.roundState='paused';p.remainingMs=5000;p.endsAt=null;}
+ reconcile(model);delete model.meta.lastRosterChange;
+}
+function allocateFighterId(model){
+ const max=model.players.reduce((n,p)=>Math.max(n,p.id),-1)+1;
+ const id=Math.max(max,Number(model.meta.nextPlayerId)||0);model.meta.nextPlayerId=id+1;return id;
+}
+function parseImport(text){
+ const raw=text.trim();if(!raw)throw Error('Paste IDs or choose a JSON file.');
+ let list;
+ if(raw.startsWith('[')||raw.startsWith('{')){
+  let json;try{json=JSON.parse(raw);}catch(err){throw Error('Invalid JSON. Use an array of IDs or {"players": [...]} .');}
+  list=Array.isArray(json)?json:json.players;
+  if(!Array.isArray(list))throw Error('JSON must be an array or contain a players array.');
+ }else list=raw.split(/[\s,;]+/).filter(Boolean);
+ if(list.length>500)throw Error('Import up to 500 fighters at a time.');
+ const seen=new Set(),ids=[],errors=[];
+ list.forEach((row,i)=>{
+  try{
+   const value=typeof row==='object'&&row!==null?(row.robloxId??row.userId??row.id):row;
+   const id=parseRobloxId(value);if(seen.has(id)){errors.push('Row '+(i+1)+': duplicate ID '+id+' skipped.');return;}
+   seen.add(id);ids.push(id);
+  }catch(err){errors.push('Row '+(i+1)+': invalid Roblox ID.');}
+ });
+ if(!ids.length)throw Error('No valid Roblox IDs found.');
+ return {ids,errors};
+}
+function avatarFromResponse(result,id){
+ const entry=result?.data?.find(x=>Number(x.targetId)===id);
+ if(entry?.state!=='Completed'||typeof entry.imageUrl!=='string')return null;
+ try{const url=new URL(entry.imageUrl);return url.protocol==='https:'&&(url.hostname==='rbxcdn.com'||url.hostname.endsWith('.rbxcdn.com'))?url.href:null;}catch{return null;}
+}
+async function resolveImport(ids,progress){
+ const users=[],errors=[];
+ for(let i=0;i<ids.length;i+=100){
+  const chunk=ids.slice(i,i+100);progress('Looking up fighters '+(i+1)+'–'+Math.min(ids.length,i+100)+' of '+ids.length+'…');
+  let data;try{data=await fetchJSON('/api/roblox/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userIds:chunk,excludeBannedUsers:true}),signal:AbortSignal.timeout(20000)});}
+  catch(err){throw Error('Bulk lookup failed. Upload the new Netlify folder with _redirects, then retry. Roblox may also be rate limiting requests.');}
+  if(!Array.isArray(data.data))throw Error('Roblox returned an invalid bulk response.');
+  let avatars;try{avatars=await fetchJSON('/api/roblox/avatar?userIds='+chunk.join(',')+'&size=420x420&format=Png&isCircular=false',{signal:AbortSignal.timeout(20000)});}catch{avatars=null;}
+  for(const id of chunk){const user=data.data.find(x=>x.id===id&&typeof x.name==='string'&&x.name);
+   if(user)users.push({id,name:user.name,avatar:avatarFromResponse(avatars,id)});else errors.push('ID '+id+': not found or banned; excluded.');
+  }
+ }
+ return {users,errors};
+}
+function importPreviewMarkup(){
+ if(!importPreview)return '';
+ const existing=new Set(state.players.map(p=>p.robloxId).filter(Boolean));
+ return '<div class="hint">'+importPreview.users.length+' valid fighters · '+importPreview.users.filter(x=>existing.has(x.id)).length+' already in this draft</div><div class="import-list">'+importPreview.users.map(u=>'<div class="manager-row">'+(u.avatar?'<img class="queue-avatar" src="'+esc(u.avatar)+'" alt="" />':'')+'<span>'+esc(u.name)+' <small>'+u.id+'</small></span></div>').join('')+'</div>'+(importPreview.errors.length?'<details><summary>'+importPreview.errors.length+' skipped rows</summary><p class="hint">'+importPreview.errors.map(esc).join('<br>')+'</p></details>':'');
+}
+function rosterManagerMarkup(){
+ const query=(document.getElementById('fighterSearch')?.value||'').toLowerCase();
+ return state.players.filter(p=>p.username.toLowerCase().includes(query)||String(p.robloxId||'').includes(query)).map(p=>'<div class="manager-row"><input type="checkbox" aria-label="Select '+esc(p.username)+'" data-fighter-select="'+p.id+'" '+(selectedFighters.has(p.id)?'checked':'')+' />'+(p.avatarUrl?'<img class="queue-avatar" src="'+esc(p.avatarUrl)+'" alt="" loading="lazy" />':'')+'<span class="manager-name">'+esc(p.username)+'<small>'+esc(p.status)+(p.robloxId?' · '+p.robloxId:'')+(p.status==='sold'?' · '+fmt(p.soldPrice)+' notes':'')+'</small></span><button class="btn btn-sm" data-action="remove-fighter" data-id="'+p.id+'">Remove</button>'+(p.status==='sold'?'<button class="btn btn-sm" data-action="reopen-sale" data-id="'+p.id+'">Refund / requeue</button>':'')+'</div>').join('')||'<p class="hint">No fighters in this list.</p>';
+}
+function updateRosterManager(){
+ const box=document.getElementById('fighterManager');if(box)box.innerHTML=rosterManagerMarkup();
+ const count=document.getElementById('selectedFighterCount');if(count)count.textContent=selectedFighters.size+' selected';
+ const preview=document.getElementById('importPreview');if(preview)preview.innerHTML=importPreviewMarkup();
+}
+function managementMarkup(){return '<details class="manager-tools"><summary>Bulk import & fighter list</summary><div class="field"><label for="bulkFighterInput">Paste Roblox IDs, profile links, or JSON</label><textarea id="bulkFighterInput" rows="5" placeholder="123456789\n987654321\n\nOr: {&quot;players&quot;:[{&quot;robloxId&quot;:123456789}]}"></textarea></div><div class="row"><input id="fighterJsonFile" type="file" accept=".json,.txt,application/json,text/plain" aria-label="Import fighter JSON or text file" /><button class="btn btn-sm" data-action="preview-import">Preview import</button></div><p class="hint" id="importProgress" role="status"></p><div id="importPreview">'+importPreviewMarkup()+'</div><div class="row"><select id="importMode" aria-label="Import mode"><option value="append">Add to current list</option><option value="replace">Replace entire list (refund sales)</option></select><button class="btn btn-gold btn-sm" data-action="apply-import">Import previewed fighters</button><button class="btn btn-sm" data-action="export-fighters">Export fighter JSON</button></div><div class="field"><label for="fighterSearch">Search fighters</label><input id="fighterSearch" placeholder="Name or Roblox ID" /></div><div class="admin-actions"><button class="btn btn-sm" data-action="select-all-fighters">Select all</button><button class="btn btn-sm" data-action="clear-fighter-selection">Deselect</button><span id="selectedFighterCount">'+selectedFighters.size+' selected</span><button class="btn btn-danger btn-sm" data-action="remove-selected-fighters">Remove selected</button></div><div id="fighterManager" class="manager-list">'+rosterManagerMarkup()+'</div><div class="admin-actions"><button class="btn btn-danger btn-sm" data-action="clear-fighter-list">Clear fighter list</button><button class="btn btn-sm" data-action="undo-roster-change">Undo last list change</button><button class="btn btn-sm" data-action="shuffle-queue">Shuffle pending queue</button><button class="btn btn-sm" data-action="requeue-unsold">Requeue unsold</button></div><p class="hint">Removing sold fighters refunds their captain. Undo works until bids or fighter details change again.</p></details>';}
+function downloadJson(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+async function rosterAction(action,el){
+ hostRequired();
+ if(action==='preview-import'){
+  const text=document.getElementById('bulkFighterInput').value;const parsed=parseImport(text);importPreview=null;
+  const progress=msg=>{const out=document.getElementById('importProgress');if(out)out.textContent=msg;};
+  try{const result=await resolveImport(parsed.ids,progress);importPreview={raw:text,users:result.users,errors:[...parsed.errors,...result.errors]};progress('Preview ready. '+result.users.length+' valid fighters.');updateRosterManager();}catch(err){progress('Preview failed. Nothing imported.');throw err;}return;
+ }
+ if(action==='apply-import'){
+  if(!importPreview||importPreview.raw!==document.getElementById('bulkFighterInput').value)throw Error('Preview the current input first.');
+  if(!importPreview.users.length)throw Error('No valid fighters to import.');
+  const replace=document.getElementById('importMode').value==='replace',users=JSON.parse(JSON.stringify(importPreview.users));
+  if(replace&&!confirm('Replace every fighter, cancel the current round and refund all sold picks? Captain seats are retained.'))return;
+  let added=0,skipped=0;
+  await hostMutate(model=>{added=0;skipped=0;changeRoster(model,()=>{
+   if(replace)model.players=[];
+   for(const user of users){if(model.players.some(p=>p.robloxId===user.id||p.username.toLowerCase()===user.name.toLowerCase())){skipped++;continue;}installRobloxUser(model,user,user.avatar,'');added++;}
+  });});selectedFighters.clear();updateRosterManager();showToast(added+' fighters added; '+skipped+' existing fighters skipped.');return;
+ }
+ if(action==='export-fighters'){downloadJson('deepwoken-fighters.json',{players:state.players.filter(p=>p.robloxId).map(p=>({robloxId:p.robloxId,username:p.username}))});return;}
+ if(action==='select-all-fighters'){const query=(document.getElementById('fighterSearch')?.value||'').toLowerCase();state.players.filter(p=>p.username.toLowerCase().includes(query)||String(p.robloxId||'').includes(query)).forEach(p=>selectedFighters.add(p.id));updateRosterManager();return;}
+ if(action==='clear-fighter-selection'){selectedFighters.clear();updateRosterManager();return;}
+ if(action==='remove-fighter'||action==='remove-selected-fighters'||action==='clear-fighter-list'){
+  const ids=action==='clear-fighter-list'?state.players.map(p=>p.id):action==='remove-selected-fighters'?[...selectedFighters]:[Number(el.dataset.id)];
+  if(!ids.length)throw Error('Select fighters first.');
+  if(!confirm('Remove '+ids.length+' fighter(s)? Active bids on these fighters will be cancelled and sold picks refunded.'))return;
+  const remove=new Set(ids);await hostMutate(model=>changeRoster(model,()=>{model.players=model.players.filter(p=>!remove.has(p.id));}));
+  ids.forEach(id=>selectedFighters.delete(id));updateRosterManager();return;
+ }
+ await hostMutate((model,now)=>{
+  if(action==='undo-roster-change'){undoRosterChange(model);return;}
+  if(action==='shuffle-queue'){
+   const pending=model.players.filter(p=>p.status==='pending');
+   for(let i=pending.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pending[i],pending[j]]=[pending[j],pending[i]];}
+   let n=0;model.players=model.players.map(p=>p.status==='pending'?pending[n++]:p);return;
+  }
+  if(action==='requeue-unsold'){model.players.forEach(p=>{if(p.status==='skipped'){resetLot(p,model.meta.startingBid);p.status='pending';}});return;}
+  if(action==='reopen-sale'){
+   const p=model.players.find(p=>p.id===Number(el.dataset.id));if(!p||p.status!=='sold')throw Error('That fighter is no longer sold.');
+   changeRoster(model,()=>{resetLot(p,model.meta.startingBid);p.status='pending';p.soldTo=null;p.soldPrice=null;});return;
+  }
+  if(action==='add-round-time'){
+   const p=activeIn(model);if(!p)throw Error('No active round.');
+   if(p.roundState==='running'){if(now>=p.endsAt)throw Error('This round has already ended.');p.endsAt+=5000;}
+   else if(p.roundState==='paused')p.remainingMs=(p.remainingMs||0)+5000;else throw Error('Start the round first.');return;
+  }
+ });updateRosterManager();
 }
 
 /* Shared database mutations: bids transact one lot; hosts transact the whole ledger. */
 let delegated=false,busy=false;
 function attachOnce(){
  if(delegated)return;delegated=true;
+ document.addEventListener('input',e=>{if(e.target.id==='fighterSearch')updateRosterManager();if(e.target.id==='bulkFighterInput'){importPreview=null;updateRosterManager();}});
+ document.addEventListener('change',async e=>{
+  if(e.target.dataset.fighterSelect!==undefined){const id=Number(e.target.dataset.fighterSelect);e.target.checked?selectedFighters.add(id):selectedFighters.delete(id);updateRosterManager();}
+  if(e.target.id==='fighterJsonFile'){
+   try{const file=e.target.files?.[0];if(!file)return;if(file.size>2*1024*1024)throw Error('Use a file smaller than 2 MB.');document.getElementById('bulkFighterInput').value=await file.text();importPreview=null;updateRosterManager();}catch(err){showToast(err.message);}
+  }
+ });
  document.addEventListener('error',e=>{const img=e.target;if(img.tagName!=='IMG')return;if(img.classList.contains('queue-avatar')){img.remove();return;}const fallback=document.createElement('div');fallback.className='fallback';fallback.textContent=initials(img.alt||'?');img.replaceWith(fallback);},true);
  document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-action]');if(!el||el.disabled)return;e.preventDefault();
@@ -760,6 +877,10 @@ function friendlyError(err){
  return err.message||'Could not complete that action.';
 }
 async function handleAction(action,el){
+ if(['preview-import','apply-import','export-fighters','select-all-fighters','clear-fighter-selection','remove-fighter','remove-selected-fighters','clear-fighter-list','undo-roster-change','shuffle-queue','requeue-unsold','reopen-sale','add-round-time'].includes(action)){
+  if(action==='reopen-sale'&&!confirm('Refund this sale and return the fighter to the pending queue?'))return;
+  await rosterAction(action,el);return;
+ }
  if(action==='goto-role-select'){state.screen='role-select';render();return;}
  if(action==='goto-admin-login'){state.screen='admin-login';render();return;}
  if(action==='goto-bidder-join'){state.screen='bidder-join';render();return;}
@@ -767,7 +888,7 @@ async function handleAction(action,el){
  if(action==='add-roblox-user'){
   hostRequired();const id=parseRobloxId(document.getElementById('robloxIdInput').value),target=document.getElementById('robloxTarget').value;
   const user=await lookupRobloxUser(id),avatar=await lookupRobloxAvatar(id);
-  await hostMutate(model=>installRobloxUser(model,user,avatar,target));
+  await hostMutate(model=>changeRoster(model,()=>installRobloxUser(model,user,avatar,target)));
   document.getElementById('robloxIdInput').value='';showToast(avatar?'Fighter saved with Roblox avatar.':'Fighter saved. Avatar is unavailable; try Refresh current avatar later.');return;
  }
  if(action==='refresh-roblox-avatar'){
@@ -859,6 +980,7 @@ async function submitBid(amt){
  if(!currentUser||!connected||!clockReady)throw Error('Wait for the live connection.');
  const mine=Object.entries(state.bidders).find(([n,b])=>b.uid===currentUser.uid);
  if(!mine)throw Error('A host-approved captain seat is required.');
+ if(state.players.filter(p=>p.status==='sold'&&p.soldTo===mine[0]).length>=MAX_ROSTER_SIZE)throw Error('Your team is full: maximum 12 fighters.');
  const p=activePlayer();if(!p)throw Error('No active lot.');
  let reason='The round changed. Try again.';
  const result=await sessionRef.child('players/'+p.id).transaction(lot=>{
