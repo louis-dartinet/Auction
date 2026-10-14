@@ -664,7 +664,7 @@ function adminDashboardScreen(){
     '<div class="setup-banner" style="margin:14px auto;max-width:1300px">Keep this host dashboard open: bids close at the shared deadline; this dashboard records sales automatically.</div>' +
     '<main class="layout">'+
       '<aside class="queue-col"><div class="col-heading" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'+
-        '<span>Lots — '+lotTotal()+' total</span>'+
+        '<span>Lots — '+lotTotal()+' total</span><button class="btn btn-danger btn-sm" style="width:auto;padding:4px 10px;" data-action="clear-fighter-list">Clear list</button>'+
         '<button class="btn btn-ghost btn-sm" id="entrantsToggleBtn" style="width:auto;padding:4px 10px;" data-action="admin-toggle-entrants">'+(state.hideEntrants?"Show":"Hide")+'</button>'+
         '</div>'+
         '<div class="queue-scroll" id="queueBox">'+queueBoxMarkup()+'</div></aside>'+
@@ -749,10 +749,11 @@ function allocateFighterId(model){
 }
 function parseImport(text){
  const raw=text.trim();if(!raw)throw Error('Paste IDs or choose a JSON file.');
- let list;
+ let list,mode=null;
  if(raw.startsWith('[')||raw.startsWith('{')){
   let json;try{json=JSON.parse(raw);}catch(err){throw Error('Invalid JSON. Use an array of IDs or {"players": [...]} .');}
   list=Array.isArray(json)?json:json.players;
+  if(!Array.isArray(json)&&json.mode==='replace')mode='replace';
   if(!Array.isArray(list))throw Error('JSON must be an array or contain a players array.');
  }else list=raw.split(/[\s,;]+/).filter(Boolean);
  if(list.length>500)throw Error('Import up to 500 fighters at a time.');
@@ -765,7 +766,7 @@ function parseImport(text){
   }catch(err){errors.push('Row '+(i+1)+': invalid Roblox ID.');}
  });
  if(!ids.length)throw Error('No valid Roblox IDs found.');
- return {ids,errors};
+ return {ids,errors,mode};
 }
 function avatarFromResponse(result,id){
  const entry=result?.data?.find(x=>Number(x.targetId)===id);
@@ -800,12 +801,13 @@ function updateRosterManager(){
  const count=document.getElementById('selectedFighterCount');if(count)count.textContent=selectedFighters.size+' selected';
  const preview=document.getElementById('importPreview');if(preview)preview.innerHTML=importPreviewMarkup();
 }
-function managementMarkup(){return '<details class="manager-tools"><summary>Bulk import & fighter list</summary><div class="field"><label for="bulkFighterInput">Paste Roblox IDs, profile links, or JSON</label><textarea id="bulkFighterInput" rows="5" placeholder="123456789\n987654321\n\nOr: {&quot;players&quot;:[{&quot;robloxId&quot;:123456789}]}"></textarea></div><div class="row"><input id="fighterJsonFile" type="file" accept=".json,.txt,application/json,text/plain" aria-label="Import fighter JSON or text file" /><button class="btn btn-sm" data-action="preview-import">Preview import</button></div><p class="hint" id="importProgress" role="status"></p><div id="importPreview">'+importPreviewMarkup()+'</div><div class="row"><select id="importMode" aria-label="Import mode"><option value="append">Add to current list</option><option value="replace">Replace entire list (refund sales)</option></select><button class="btn btn-gold btn-sm" data-action="apply-import">Import previewed fighters</button><button class="btn btn-sm" data-action="export-fighters">Export fighter JSON</button></div><div class="field"><label for="fighterSearch">Search fighters</label><input id="fighterSearch" placeholder="Name or Roblox ID" /></div><div class="admin-actions"><button class="btn btn-sm" data-action="select-all-fighters">Select all</button><button class="btn btn-sm" data-action="clear-fighter-selection">Deselect</button><span id="selectedFighterCount">'+selectedFighters.size+' selected</span><button class="btn btn-danger btn-sm" data-action="remove-selected-fighters">Remove selected</button></div><div id="fighterManager" class="manager-list">'+rosterManagerMarkup()+'</div><div class="admin-actions"><button class="btn btn-danger btn-sm" data-action="clear-fighter-list">Clear fighter list</button><button class="btn btn-sm" data-action="undo-roster-change">Undo last list change</button><button class="btn btn-sm" data-action="shuffle-queue">Shuffle pending queue</button><button class="btn btn-sm" data-action="requeue-unsold">Requeue unsold</button></div><p class="hint">Removing sold fighters refunds their captain. Undo works until bids or fighter details change again.</p></details>';}
+function managementMarkup(){return '<details class="manager-tools" open><summary>Bulk import & fighter list</summary><div class="field"><label for="bulkFighterInput">Paste Roblox IDs, profile links, or JSON</label><textarea id="bulkFighterInput" rows="5" placeholder="123456789\n987654321\n\nOr: {&quot;players&quot;:[{&quot;robloxId&quot;:123456789}]}"></textarea></div><div class="row"><input id="fighterJsonFile" type="file" accept=".json,.txt,application/json,text/plain" aria-label="Import fighter JSON or text file" /><button class="btn btn-sm" data-action="preview-import">Preview import</button></div><p class="hint" id="importProgress" role="status"></p><div id="importPreview">'+importPreviewMarkup()+'</div><div class="row"><select id="importMode" aria-label="Import mode"><option value="append">Add to current list</option><option value="replace">Replace entire list (refund sales)</option></select><button class="btn btn-gold btn-sm" data-action="apply-import">Import previewed fighters</button><button class="btn btn-sm" data-action="export-fighters">Export fighter JSON</button></div><div class="field"><label for="fighterSearch">Search fighters</label><input id="fighterSearch" placeholder="Name or Roblox ID" /></div><div class="admin-actions"><button class="btn btn-sm" data-action="select-all-fighters">Select all</button><button class="btn btn-sm" data-action="clear-fighter-selection">Deselect</button><span id="selectedFighterCount">'+selectedFighters.size+' selected</span><button class="btn btn-danger btn-sm" data-action="remove-selected-fighters">Remove selected</button></div><div id="fighterManager" class="manager-list">'+rosterManagerMarkup()+'</div><div class="admin-actions"><button class="btn btn-danger btn-sm" data-action="clear-fighter-list">Clear fighter list</button><button class="btn btn-sm" data-action="undo-roster-change">Undo last list change</button><button class="btn btn-sm" data-action="shuffle-queue">Shuffle pending queue</button><button class="btn btn-sm" data-action="requeue-unsold">Requeue unsold</button></div><p class="hint">Removing sold fighters refunds their captain. Undo works until bids or fighter details change again.</p></details>';}
 function downloadJson(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function rosterAction(action,el){
  hostRequired();
  if(action==='preview-import'){
   const text=document.getElementById('bulkFighterInput').value;const parsed=parseImport(text);importPreview=null;
+  if(parsed.mode)document.getElementById('importMode').value=parsed.mode;
   const progress=msg=>{const out=document.getElementById('importProgress');if(out)out.textContent=msg;};
   try{const result=await resolveImport(parsed.ids,progress);importPreview={raw:text,users:result.users,errors:[...parsed.errors,...result.errors]};progress('Preview ready. '+result.users.length+' valid fighters.');updateRosterManager();}catch(err){progress('Preview failed. Nothing imported.');throw err;}return;
  }
