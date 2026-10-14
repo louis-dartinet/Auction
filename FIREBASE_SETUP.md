@@ -46,3 +46,11 @@ Host tools also include Shuffle pending queue, Requeue unsold, Refund / requeue 
 Each captain may own at most 12 fighters. Bid buttons, client checks, settlement logic, and database rules enforce the limit. Publish the updated database.rules.json, even if you previously published an earlier version. A host action such as pause/resume recomputes rosterCount for existing captains; new captain approval does this automatically. Until that count exists, the updated rules reject that captain's bids.
 
 Local tests cover bulk parsing, refunds and undo, stable IDs, sparse Firebase data, the 12-player cap and core auction transitions. Live Netlify proxy and multi-device Firebase testing remain pending.
+
+## Captain removal and live status
+
+Hosts can remove a joined captain using Remove beside their name. Their purchased fighters return to the pending queue; their bids are removed from the active lot's audit trail and the previous valid highest bid is restored. Their seat request is then cleared separately. If that last request deletion fails, captain removal remains committed and the app reports that the request could not be cleared. Restoring a removed captain requires a new request and host approval.
+
+The public landing screen, join screen and dashboard show separate badges for Captain signups (Open, Closed, Full, Not initialised, Reconnecting) and Bidding (Live, Paused, Ready, Closed, Awaiting next lot, Finished, No fighters). The host button explicitly says Open captain signups or Close captain signups. New seat requests are disabled while signups are closed or all seats are occupied. Existing approved captains can still enter.
+
+Lot totals and current lot positions are calculated from the current saved fighter list, and the queue heading refreshes immediately after imports, removal and clearing.
