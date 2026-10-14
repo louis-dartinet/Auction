@@ -261,6 +261,24 @@
     section.hero-col{order:-1;}
     .queue-scroll{max-height:260px;}
   }
+
+/* Parchment and charcoal, inspired by the D1 signup panel. */
+:root{--panel:#dedfce;--panel-raised:#e9e9db;--line:#a8aa95;--bone:#252b24;--dim:#626855;--gold:#66734d;--gold-bright:#394b2e;--verdigris:#557e61;--void:#10191b;--radius:2px;}
+body{background:radial-gradient(ellipse at 15% 0%,#334c49 0,transparent 55%),linear-gradient(135deg,#192729,#0d1517);color:#dddfd0;}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(115deg,transparent 0 90px,#9bac9910 91px 92px);z-index:-1;}
+.gate-card{max-width:640px;padding:48px!important;border:12px solid #202621;outline:1px solid #84907b;box-shadow:0 28px 70px #0007;color:var(--bone);}
+.panel,.hero-wrap,.queue-col,.side-col,.rosters-wrap,.sold-strip-wrap{color:var(--bone);}
+.hero-wrap{background:linear-gradient(145deg,#e5e5d6,#cdcfbd);border:10px solid #202621;outline:1px solid #64725e;padding:30px;}
+.queue-col,.side-col,.rosters-wrap,.sold-strip-wrap{background:#d9dbca;padding:20px;border:1px solid #8f987f;}
+h1,h2,.hero-name{font-family:var(--font-display);font-weight:500;letter-spacing:-.025em;}
+.gate h1{font-size:clamp(36px,6vw,56px);}.hero-name{font-size:clamp(30px,4vw,48px);}
+.btn-gold,.btn-next,.btn-sold{background:#35472e!important;color:#f0f0df!important;border-color:#35472e!important;}
+.btn{border-radius:2px;}.btn:hover{filter:brightness(1.08);transform:translateY(-1px);}.btn:disabled{opacity:.45;transform:none;cursor:not-allowed;}
+.rules-strip{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:24px 0;}.rules-strip span{border:1px solid #9fa58e;padding:7px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;}
+.round-clock{margin:22px auto 10px;max-width:430px;text-align:left;}.clock-head{display:flex;align-items:baseline;justify-content:space-between;font-size:11px;letter-spacing:.13em;text-transform:uppercase;}.clock-head strong{font:42px var(--font-display);letter-spacing:0;}.clock-track{height:5px;background:#b1b7a1;margin:8px 0 12px;}.clock-fill{height:100%;background:#456541;transition:width .15s linear;}.round-clock.urgent .clock-fill{background:#ad4a37;}.round-clock.urgent strong{color:#a23829;}.round-clock small{color:#59614d;letter-spacing:0;}
+.bid-history{max-width:430px;margin:22px auto 0;text-align:left;border-top:1px solid #a8ad96;padding-top:14px;}.history-row{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;border-bottom:1px solid #afb49e55;}.history-row span{color:#59614d;}.history-row b{font-variant-numeric:tabular-nums;}.admin-actions{flex-wrap:wrap;}.topbar{background:#121c1d;color:#e2e3d4;}.setup-banner{color:#465340!important;background:#cad0b9!important;border-color:#8c977c!important;}.roster-col{background:#e5e6d7!important;}.bidder-row.me{background:#bdc8ac!important;}input,select{color:#232b21!important;background:#f0f0e5!important;border-color:#9ba58c!important;}input::placeholder{color:#7a806d;}.hint{color:#606852;}.col-heading{color:#46553c;}.lot-row.active{background:#b9c5a6;}.value{color:#33472c!important;}.frame .fallback{background:#b5bfa5;color:#33452f;}.toast{background:#202d23!important;color:#e8eadc!important;}.gate-card .sigil{margin-bottom:22px;}
+@media(max-width:700px){.gate-card{padding:26px!important;margin:16px;}.hero-wrap{padding:20px;border-width:6px;}.clock-head strong{font-size:34px;}.layout{gap:16px;}.queue-col{max-height:260px;overflow:auto;}}
+
 </style>
 </head>
 <body>
@@ -274,7 +292,7 @@
 // All auction data is stored only in this browser (localStorage).
 const STARTING_BUDGET = 30000;
 const FIREBASE_CONFIGURED = true; // Demo mode is always available.
-const DEMO_PREFIX = "deepwoken_portfolio_demo_v1_";
+const DEMO_PREFIX = "deepwoken_draft_v2_";
 const db = null;
 
 const USERNAMES = [
@@ -309,7 +327,7 @@ async function sSet(key, value){
 function watch(key, onChange){ /* No shared realtime database in portfolio demo. */ }
 
 function fmt(n){ return Math.round(n).toLocaleString("en-US"); }
-function esc(s){ const d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML; }
+function esc(s){ const d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML.replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 function initials(name){ return (name||"?").slice(0,2).toUpperCase(); }
 
 /* ============================= APP STATE ============================= */
@@ -428,17 +446,17 @@ function heroMarkup(role){
   if(!p){
     const done = pendingPlayers().length===0;
     return '<div class="empty-hero"><div class="sigil"></div><h2>'+(done?"The ledger is closed":"No lot selected")+'</h2>'+
-      '<p>'+(done?"All 48 fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
+      '<p>'+(done?"All 42 fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
   }
   const lotNum = p.id+1;
   let html = '<div class="lot-label">Lot '+lotNum+' of '+USERNAMES.length+'</div>';
   html += avatarFrame(p, !!p.highestBidder);
-  html += '<h2 class="hero-name">'+esc(p.username)+'</h2>';
+  html += '<h2 class="hero-name">'+esc(p.username)+'</h2>'+clockMarkup(p);
   html += '<div class="bid-figures">'+
     '<div class="item"><div class="label">Current bid</div><div class="value">'+fmt(p.currentBid)+'</div></div>'+
     '<div class="item"><div class="label">Highest bidder</div><div class="value bidder">'+(p.highestBidder?esc(p.highestBidder):"— none yet —")+'</div></div>'+
     '</div>';
-  return html;
+  return html+historyMarkup(p);
 }
 
 function queueMarkup(clickable){
@@ -559,7 +577,7 @@ function refreshQuickBidButtons(){
   const steps = [100,250,500,1000];
   box.innerHTML = steps.map(s=>{
     const amt = p.currentBid + s;
-    const disabled = amt > budget;
+    const disabled = amt > budget || p.roundState!=="running" || Date.now()>=p.endsAt || p.highestBidder===state.bidderName;
     return '<button data-action="bidder-quick-bid" data-amt="'+amt+'" '+(disabled?"disabled":"")+'>+'+s+' → '+fmt(amt)+'</button>';
   }).join("");
 }
@@ -569,11 +587,11 @@ function roleSelectScreen(){
   return '<div class="gate"><div class="gate-card panel">'+
     '<div class="sigil"></div>'+
     '<h1>The Deepwoken Draft</h1>'+
-    '<p class="tag">6 captain seats. One ledger. Spend your notes wisely.</p>'+
+    '<p class="tag">Six captains. 30,000 notes each. Build your winning roster.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>Automatic sales</span></div>'+
     banner+
     '<div class="stack">'+
-      '<button class="btn btn-gold" data-action="goto-admin-login">Open demo host dashboard</button>'+
-      '<button class="btn" data-action="goto-bidder-join">Join demo auction</button>'+
+      '<button class="btn btn-gold" data-action="goto-admin-login">Host the draft</button>'+
+      '<button class="btn" data-action="goto-bidder-join">Join as captain</button>'+
     '</div>'+
     '<p class="hint" style="margin-top:22px;">Portfolio demonstration. No real money or shared auction data.</p>'+
     '</div></div>';
@@ -637,7 +655,7 @@ function adminDashboardScreen(){
 }
 
 function adminPanelMarkup(){
-  return '<div class="admin-panel panel">'+
+  return '<div class="admin-actions" style="margin-bottom:18px"><button class="btn btn-gold" data-action="round-start">Start / resume</button><button class="btn" data-action="round-pause">Pause</button><button class="btn" data-action="round-undo">Undo last bid</button><button class="btn" data-action="round-restart">Restart round</button><button class="btn" data-action="export-results">Export results</button></div>'+ '<div class="admin-panel panel">'+
     '<div class="row">'+
       '<input id="startingBidInput" type="number" min="0" placeholder="Opening bid for next lot" value="'+state.meta.startingBid+'" />'+
       '<button class="btn btn-sm" data-action="admin-set-starting-bid">Set</button>'+
@@ -698,6 +716,10 @@ function attachOnce(){
     if(!el) return;
     e.preventDefault();
     const action = el.getAttribute("data-action");
+    if(el.disabled) return;
+    if(action.startsWith("round-") || action==="export-results"){await roundAction(action);return;}
+    if(action==="admin-next-lot" && activePlayer()){showToast("Finish or skip the current round first.");return;}
+    if(action==="admin-select-lot" && activePlayer() && activePlayer().roundState==="running"){showToast("Pause or finish this round first.");return;}
 
     if(action === "goto-role-select"){ state.screen="role-select"; state.bidderName=null; render(); }
     else if(action === "goto-admin-login"){ state.screen="admin-login"; render();  }
@@ -778,8 +800,8 @@ function attachOnce(){
       const id = Number(el.getAttribute("data-id"));
       await refreshAll();
       const players = state.players.map(p=>{
-        if(p.status==="active") return Object.assign({}, p, {status:"pending"});
-        if(p.id===id && p.status==="pending") return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null});
+        if(p.status==="active") return Object.assign({}, p, {status:"pending",currentBid:0,highestBidder:null,roundState:"ready",endsAt:null,history:[]});
+        if(p.id===id && p.status==="pending") return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null, roundState:"ready", endsAt:null, history:[]});
         return p;
       });
       await sSet("dw_players", players);
@@ -789,6 +811,7 @@ function attachOnce(){
 
     else if(action === "admin-set-starting-bid"){
       const v = Number((document.getElementById("startingBidInput")||{}).value || 0);
+      if(!Number.isSafeInteger(v)||v<0||v>STARTING_BUDGET){showToast("Use whole notes from 0 to 30,000.");return;}
       const meta = Object.assign({}, state.meta, {startingBid: v});
       await sSet("dw_meta", meta);
       state.meta = meta;
@@ -796,37 +819,16 @@ function attachOnce(){
     }
 
     else if(action === "admin-set-bid"){
-      await refreshAll();
-      const p = activePlayer();
-      if(!p){ showToast("No active lot."); return; }
-      const amt = Number((document.getElementById("customBidInput")||{}).value || 0);
-      const who = (document.getElementById("assignBidderSelect")||{}).value || "";
-      if(!amt || amt<=0){ showToast("Enter a bid amount."); return; }
-      const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {currentBid: amt, highestBidder: who || pl.highestBidder}) : pl);
-      await sSet("dw_players", players);
-      state.players = players;
-      rerenderDynamic();
-      showToast("Bid recorded: "+fmt(amt)+" notes"+(who?" — "+who:""));
+      const amt=Number(document.getElementById("customBidInput").value);
+      const who=document.getElementById("assignBidderSelect").value;
+      await submitBid(amt,who);
     }
 
     else if(action === "admin-mark-sold"){
-      await refreshAll();
-      const p = activePlayer();
-      if(!p){ showToast("No active lot."); return; }
-      if(!p.highestBidder){ if(!confirm("No highest bidder set — mark this lot sold with no buyer recorded?")){ return; } }
-      const players = state.players.slice();
-      const bidders = Object.assign({}, state.bidders);
-      const idx = players.findIndex(pl=>pl.id===p.id);
-      players[idx] = Object.assign({}, p, {status:"sold", soldPrice:p.currentBid, soldTo:p.highestBidder});
-      if(p.highestBidder){
-        const b = bidders[p.highestBidder] || {budget:STARTING_BUDGET, won:[]};
-        bidders[p.highestBidder] = Object.assign({}, b, {budget: b.budget - p.currentBid, won: (b.won||[]).concat([p.id])});
-      }
-      await sSet("dw_players", players);
-      await sSet("dw_bidders", bidders);
-      state.players = players; state.bidders = bidders;
-      rerenderDynamic();
-      showToast(esc(p.username)+" sold for "+fmt(p.currentBid)+" notes");
+      await refreshAll();const p=activePlayer();
+      if(!p || !p.highestBidder){showToast("A winning bid is needed. Skip an unsold lot instead.");return;}
+      if(!confirm("Close this round now and sell to "+p.highestBidder+"?"))return;
+      await settleRound(p);
     }
 
     else if(action === "admin-skip-lot"){
@@ -844,7 +846,7 @@ function attachOnce(){
       const next = state.players.find(p=>p.status==="pending");
       const players = state.players.map(p=>{
         if(p.status==="active") return p; // leave as-is; host should mark sold/skip first
-        if(next && p.id===next.id) return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null});
+        if(next && p.id===next.id) return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null, roundState:"ready", endsAt:null, history:[]});
         return p;
       });
       await sSet("dw_players", players);
@@ -894,19 +896,95 @@ function attachOnce(){
   });
 }
 
-async function placeBid(amt){
-  await refreshAll();
-  const p = activePlayer();
-  if(!p){ showToast("No active lot to bid on."); return; }
-  if(amt <= p.currentBid){ showToast("Your bid must beat the current bid of "+fmt(p.currentBid)+"."); return; }
-  const budget = myBudget();
-  if(amt > budget){ showToast("You only have "+fmt(budget)+" notes remaining."); return; }
-  const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {currentBid:amt, highestBidder: state.bidderName}) : pl);
-  await sSet("dw_players", players);
-  state.players = players;
-  rerenderDynamic();
-  showToast("Bid placed: "+fmt(amt)+" notes");
+// All demo mutations serialize across tabs. A Firebase backend must implement
+// these same transitions in an authoritative transaction, not independent writes.
+async function locked(fn){
+  if(navigator.locks)return navigator.locks.request("deepwoken-v2-round",fn);
+  return fn();
 }
+function clockMarkup(p){
+  const seconds=p.roundState==="running"?Math.max(0,Math.ceil((p.endsAt-Date.now())/1000)):(p.remainingMs?Math.ceil(p.remainingMs/1000):20);
+  return '<div class="round-clock" id="roundClock"><div class="clock-head"><span id="clockState">'+esc(p.roundState||"Ready to start")+'</span><strong id="clockSeconds">'+seconds+'s</strong></div><div class="clock-track"><div class="clock-fill" id="clockFill"></div></div><small>20-second rounds · late bids restore 5 seconds · budgets start at 30,000</small></div>';
+}
+function historyMarkup(p){
+  return '<div class="bid-history"><div class="col-heading">Bid history</div>'+((p.history||[]).slice(-6).reverse().map(b=>'<div class="history-row"><span>'+esc(b.who)+'</span><b>'+fmt(b.amount)+' notes</b></div>').join('')||'<p class="hint">The floor is open. Waiting for the first bid.</p>')+'</div>';
+}
+async function savePlayer(p){
+  state.players=state.players.map(x=>x.id===p.id?p:x);await sSet("dw_players",state.players);rerenderDynamic();
+}
+async function submitBid(amt,who){
+  return locked(async()=>{
+    await refreshAll();const p=activePlayer(),b=state.bidders[who];
+    if(!p||p.roundState!=="running"||Date.now()>=p.endsAt){showToast("Bidding is closed or paused.");return;}
+    if(!b){showToast("Choose a registered captain.");return;}
+    if(who===p.highestBidder){showToast("You already hold the highest bid.");return;}
+    const minimum=p.highestBidder?p.currentBid+100:Math.max(100,p.currentBid);
+    if(!Number.isSafeInteger(amt)||amt<minimum){showToast("Minimum bid: "+fmt(minimum)+" whole notes.");return;}
+    if(amt>b.budget){showToast("This captain has only "+fmt(b.budget)+" notes left.");return;}
+    const now=Date.now();
+    await savePlayer({...p,currentBid:amt,highestBidder:who,endsAt:Math.max(p.endsAt,now+5000),history:[...(p.history||[]),{who,amount:amt,at:now,previousBid:p.currentBid,previousBidder:p.highestBidder||null}]});
+    showToast("Bid accepted: "+fmt(amt)+" notes");
+  });
+}
+async function placeBid(amt){return submitBid(amt,state.bidderName);}
+async function settleRound(p){
+  // Recompute purses from the sales ledger: settlement is idempotent after reload.
+  if(p.status!=="active")return;
+  const winner=state.bidders[p.highestBidder];
+  if(p.highestBidder&&(!winner||winner.budget<p.currentBid)){await savePlayer({...p,roundState:"paused",remainingMs:5000,endsAt:null});showToast("Sale paused: insufficient budget.");return;}
+  const sold=!!p.highestBidder;
+  await savePlayer({...p,status:sold?"sold":"skipped",roundState:"closed",endsAt:null,soldTo:sold?p.highestBidder:null,soldPrice:sold?p.currentBid:null});
+  await reconcileBudgets();rerenderDynamic();showToast(sold?p.username+" sold to "+p.highestBidder+" for "+fmt(p.currentBid):"No bids — lot unsold.");
+}
+async function reconcileBudgets(){
+  for(const name of Object.keys(state.bidders)){
+    const picks=state.players.filter(p=>p.status==="sold"&&p.soldTo===name);
+    state.bidders[name]={...state.bidders[name],budget:STARTING_BUDGET-picks.reduce((n,p)=>n+p.soldPrice,0),won:picks.map(p=>p.id)};
+  }
+  await sSet("dw_bidders",state.bidders);
+}
+async function roundAction(action){
+  if(state.screen!=="admin-dashboard")return;
+  if(action==="export-results"){
+    const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),players:state.players,captains:state.bidders},null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="deepwoken-results.json";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+  }
+  return locked(async()=>{
+    await refreshAll();const p=activePlayer();if(!p){showToast("Choose the next lot first.");return;}
+    const now=Date.now();
+    if(p.roundState==="running"&&now>=p.endsAt){await settleRound(p);return;}
+    if(action==="round-start"){
+      if(p.roundState==="running")return;
+      await savePlayer({...p,roundState:"running",endsAt:now+(p.remainingMs||20000),remainingMs:null});
+    }else if(action==="round-pause"){
+      if(p.roundState!=="running")return;
+      await savePlayer({...p,roundState:"paused",remainingMs:Math.max(1,p.endsAt-now),endsAt:null});
+    }else if(action==="round-restart"){
+      if(!confirm("Clear this lot's bids and reset it to 20 seconds?"))return;
+      await savePlayer({...p,currentBid:state.meta.startingBid,highestBidder:null,history:[],roundState:"ready",endsAt:null,remainingMs:20000});
+    }else if(action==="round-undo"){
+      const history=[...(p.history||[])],last=history.pop();if(!last){showToast("No bids to undo.");return;}
+      await savePlayer({...p,currentBid:last.previousBid,highestBidder:last.previousBidder,history,endsAt:p.roundState==="running"?Math.max(p.endsAt,now+5000):null});showToast("Last bid removed.");
+    }
+  });
+}
+let ticking=false;
+setInterval(async()=>{
+  if(ticking||!state.loaded)return;ticking=true;
+  try{
+    await locked(async()=>{
+      await refreshAll();const p=activePlayer();
+      if(p&&p.roundState==="running"&&Date.now()>=p.endsAt)await settleRound(p);
+    });
+    const p=activePlayer();if(!p)return;
+    const seconds=p.roundState==="running"?Math.max(0,Math.ceil((p.endsAt-Date.now())/1000)):Math.ceil((p.remainingMs||20000)/1000);
+    const clock=document.getElementById("roundClock"),sec=document.getElementById("clockSeconds"),fill=document.getElementById("clockFill"),label=document.getElementById("clockState");
+    if(sec)sec.textContent=seconds+"s";if(fill)fill.style.width=Math.min(100,seconds/20*100)+"%";
+    if(label)label.textContent=p.roundState||"Ready to start";if(clock)clock.classList.toggle("urgent",p.roundState==="running"&&seconds<=5);
+    refreshQuickBidButtons();
+  }finally{ticking=false;}
+},150);
+window.addEventListener("storage",async e=>{if(e.key&&e.key.startsWith(DEMO_PREFIX)){await refreshAll();rerenderDynamic();}});
 
 /* ============================= INIT & LIVE SYNC ============================= */
 async function init(){
@@ -915,6 +993,8 @@ async function init(){
     return;
   }
   await ensureInit();
+  await reconcileBudgets();
+  state.loaded=true;
   render();
   resolveAvatarsIfNeeded();
   // No cross-device listeners: this is a local-only demonstration.
