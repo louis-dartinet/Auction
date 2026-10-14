@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Deepwoken Draft — Portfolio Demo</title>
+<style>
+  :root{
+    --void:#0a0e0f;
+    --panel:#121a1b;
+    --panel-raised:#172221;
+    --line:#263230;
+    --gold:#b9924f;
+    --gold-bright:#e0bb7a;
+    --verdigris:#5c8b7a;
+    --bone:#ddd7c7;
+    --dim:#8a938e;
+    --rust:#8a3d38;
+    --rust-bright:#c1665f;
+    --shadow:rgba(0,0,0,.55);
+    --font-display:"Iowan Old Style","Palatino Linotype","Book Antiqua",Georgia,serif;
+    --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(92,139,122,.10), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 100%, rgba(185,146,79,.06), transparent 60%),
+      var(--void);
+    color:var(--bone);
+    font-family:var(--font-ui);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--gold-bright);}
+  button{font-family:var(--font-ui);cursor:pointer;}
+  input, select{font-family:var(--font-ui);}
+  ::selection{background:var(--gold);color:#161010;}
+  :focus-visible{outline:2px solid var(--gold-bright);outline-offset:2px;}
+
+  .panel{
+    background:linear-gradient(180deg, var(--panel-raised), var(--panel));
+    border:1px solid var(--line);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.35), 0 8px 24px var(--shadow);
+    border-radius:var(--radius);
+  }
+
+  /* ---------- App shell ---------- */
+  #app{min-height:100vh;display:flex;flex-direction:column;}
+
+  /* ---------- Centered gate screens (role select / login / join) ---------- */
+  .gate{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .gate-card{width:100%;max-width:430px;padding:38px 34px;text-align:center;}
+  .sigil{
+    width:46px;height:46px;margin:0 auto 18px;
+    border:1px solid var(--gold);
+    transform:rotate(45deg);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 22px rgba(185,146,79,.25);
+  }
+  .sigil::before{content:"";width:8px;height:8px;background:var(--gold);transform:rotate(-45deg);}
+  .gate h1{
+    font-family:var(--font-display);
+    font-size:1.9rem;font-weight:600;letter-spacing:.01em;
+    margin:0 0 6px;color:var(--bone);
+  }
+  .gate p.tag{color:var(--dim);font-size:.92rem;margin:0 0 30px;line-height:1.5;}
+  .setup-banner{
+    background:rgba(138,61,56,.14);border:1px solid var(--rust);color:var(--rust-bright);
+    border-radius:var(--radius);padding:14px 16px;font-size:.82rem;line-height:1.5;
+    text-align:left;margin-bottom:22px;
+  }
+  .setup-banner code{background:rgba(0,0,0,.35);padding:1px 5px;border-radius:2px;color:var(--bone);}
+  .conn-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;background:var(--verdigris);}
+  .conn-dot.off{background:var(--rust-bright);}
+  .stack{display:flex;flex-direction:column;gap:12px;}
+  .btn{
+    display:block;width:100%;padding:13px 18px;
+    background:transparent;border:1px solid var(--line);border-radius:var(--radius);
+    color:var(--bone);font-size:.95rem;letter-spacing:.02em;
+    transition:border-color .15s ease, background .15s ease;
+    text-align:center;
+  }
+  .btn:hover{border-color:var(--gold);background:rgba(185,146,79,.06);}
+  .btn-gold{
+    background:var(--gold);border-color:var(--gold);color:#1a1410;font-weight:600;
+  }
+  .btn-gold:hover{background:var(--gold-bright);border-color:var(--gold-bright);}
+  .btn-ghost{border-color:transparent;color:var(--dim);}
+  .btn-ghost:hover{border-color:var(--line);color:var(--bone);background:transparent;}
+  .btn-sm{padding:8px 12px;font-size:.85rem;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .btn-row .btn{width:auto;flex:1;}
+  .field{text-align:left;margin-bottom:14px;}
+  .field label{display:block;font-size:.78rem;color:var(--dim);margin-bottom:6px;letter-spacing:.02em;}
+  .field input, .field select{
+    width:100%;padding:11px 12px;background:var(--void);border:1px solid var(--line);
+    border-radius:var(--radius);color:var(--bone);font-size:.95rem;
+  }
+  .field input:focus, .field select:focus{border-color:var(--gold);}
+  .error-msg{color:var(--rust-bright);font-size:.83rem;margin:-4px 0 14px;min-height:1em;}
+  .back-link{display:inline-block;margin-top:22px;color:var(--dim);font-size:.85rem;text-decoration:none;}
+  .back-link:hover{color:var(--gold-bright);}
+
+  /* ---------- Header bar ---------- */
+  header.top{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:16px 28px;border-bottom:1px solid var(--line);
+    background:rgba(10,14,15,.6);
+    position:sticky;top:0;z-index:10;backdrop-filter:blur(6px);
+  }
+  header.top .title{display:flex;align-items:center;gap:12px;}
+  header.top .sigil{width:26px;height:26px;margin:0;}
+  header.top .sigil::before{width:5px;height:5px;}
+  header.top h1{font-family:var(--font-display);font-size:1.15rem;margin:0;font-weight:600;}
+  header.top .lot-count{color:var(--dim);font-size:.82rem;margin-top:1px;}
+  header.top .who{display:flex;align-items:center;gap:14px;font-size:.85rem;color:var(--dim);}
+  header.top .purse{color:var(--gold-bright);font-family:var(--font-display);font-size:1.05rem;}
+
+  main.layout{
+    flex:1;display:grid;grid-template-columns:230px minmax(0,1fr) 260px;gap:0;
+    max-width:1400px;width:100%;margin:0 auto;
+  }
+  main.layout.layout-2col{grid-template-columns:minmax(0,1fr) 260px;}
+  aside.queue-col, aside.side-col{padding:20px 16px;border-right:1px solid var(--line);}
+  aside.side-col{border-right:none;border-left:1px solid var(--line);}
+  section.hero-col{padding:28px;min-width:0;}
+
+  .col-heading{
+    font-size:.75rem;letter-spacing:.06em;color:var(--dim);margin:0 0 12px;
+    padding-bottom:8px;border-bottom:1px solid var(--line);
+  }
+
+  /* ---------- Queue ledger ---------- */
+  .lot-row{
+    display:flex;align-items:center;gap:9px;padding:8px 6px;border-radius:var(--radius);
+    font-size:.85rem;cursor:default;
+  }
+  .lot-row .num{color:var(--dim);font-family:var(--font-display);width:22px;flex-shrink:0;text-align:right;}
+  .lot-row .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .lot-row.active{background:rgba(185,146,79,.1);}
+  .lot-row.active .name{color:var(--gold-bright);font-weight:600;}
+  .lot-row.sold{opacity:.42;}
+  .lot-row.sold .name{text-decoration:line-through;}
+  .lot-row.skipped{opacity:.35;font-style:italic;}
+  .lot-row.clickable{cursor:pointer;}
+  .lot-row.clickable:hover{background:rgba(255,255,255,.04);}
+  .queue-scroll{max-height:calc(100vh - 140px);overflow-y:auto;}
+
+  /* ---------- Hero panel ---------- */
+  .hero-wrap{display:flex;flex-direction:column;align-items:center;text-align:center;padding:34px 24px;}
+  .frame{position:relative;width:180px;height:180px;margin-bottom:22px;}
+  .frame img, .frame .fallback{
+    width:100%;height:100%;object-fit:cover;border-radius:2px;
+    background:var(--void);display:block;
+  }
+  .frame .fallback{
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-size:2.6rem;color:var(--gold);
+  }
+  .frame .corner{position:absolute;width:18px;height:18px;border-color:var(--gold);}
+  .frame .corner.tl{top:-6px;left:-6px;border-top:2px solid;border-left:2px solid;}
+  .frame .corner.tr{top:-6px;right:-6px;border-top:2px solid;border-right:2px solid;}
+  .frame .corner.bl{bottom:-6px;left:-6px;border-bottom:2px solid;border-left:2px solid;}
+  .frame .corner.br{bottom:-6px;right:-6px;border-bottom:2px solid;border-right:2px solid;}
+  .frame.live .corner{animation:pulseglow 2.4s ease-in-out infinite;}
+  @keyframes pulseglow{
+    0%,100%{box-shadow:0 0 0 rgba(224,187,122,0);}
+    50%{box-shadow:0 0 10px rgba(224,187,122,.75);}
+  }
+  .lot-label{color:var(--verdigris);font-size:.8rem;letter-spacing:.05em;margin-bottom:6px;}
+  .hero-name{font-family:var(--font-display);font-size:2rem;margin:0 0 22px;color:var(--bone);}
+  .bid-figures{display:flex;gap:36px;margin-bottom:26px;}
+  .bid-figures .item .label{font-size:.75rem;color:var(--dim);margin-bottom:4px;}
+  .bid-figures .item .value{font-family:var(--font-display);font-size:1.5rem;color:var(--gold-bright);}
+  .bid-figures .item .value.bidder{color:var(--bone);font-size:1.2rem;}
+  .empty-hero{padding:60px 20px;text-align:center;color:var(--dim);}
+  .empty-hero .sigil{margin-bottom:18px;}
+  .empty-hero h2{font-family:var(--font-display);color:var(--bone);font-size:1.4rem;margin:0 0 8px;}
+
+  /* ---------- Bid control blocks ---------- */
+  .controls-block{width:100%;max-width:420px;margin-top:6px;}
+  .quick-bids{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;}
+  .quick-bids button{
+    padding:10px 16px;background:transparent;border:1px solid var(--gold);border-radius:var(--radius);
+    color:var(--gold-bright);font-size:.88rem;font-weight:600;
+  }
+  .quick-bids button:hover{background:rgba(185,146,79,.12);}
+  .quick-bids button:disabled{border-color:var(--line);color:var(--dim);cursor:not-allowed;background:transparent;}
+  .custom-bid-row{display:flex;gap:8px;margin-bottom:6px;}
+  .custom-bid-row input{
+    flex:1;padding:10px 12px;background:var(--void);border:1px solid var(--line);
+    border-radius:var(--radius);color:var(--bone);
+  }
+  .hint{font-size:.78rem;color:var(--dim);margin-top:4px;}
+  .divider-flourish{display:flex;align-items:center;gap:10px;color:var(--line);margin:24px 0;width:100%;max-width:420px;}
+  .divider-flourish .ln{flex:1;height:1px;background:var(--line);}
+  .divider-flourish .dot{width:5px;height:5px;background:var(--gold);transform:rotate(45deg);}
+
+  .admin-panel{width:100%;max-width:460px;margin-top:8px;padding:20px;text-align:left;}
+  .admin-panel .row{display:flex;gap:10px;margin-bottom:10px;}
+  .admin-panel .row input, .admin-panel .row select{
+    flex:1;padding:9px 10px;background:var(--void);border:1px solid var(--line);
+    border-radius:var(--radius);color:var(--bone);font-size:.88rem;
+  }
+  .admin-panel .row button{white-space:nowrap;}
+  .admin-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .admin-actions .btn{flex:1;min-width:120px;}
+  .btn-sold{background:var(--verdigris);border-color:var(--verdigris);color:#0d1512;font-weight:600;}
+  .btn-sold:hover{filter:brightness(1.12);}
+  .btn-next{background:var(--gold);border-color:var(--gold);color:#1a1410;font-weight:600;}
+  .btn-next:hover{background:var(--gold-bright);}
+  .btn-danger{border-color:var(--rust);color:var(--rust-bright);}
+  .btn-danger:hover{background:rgba(138,61,56,.12);border-color:var(--rust-bright);}
+
+  /* ---------- Sold ledger strip ---------- */
+  .sold-strip-wrap{margin-top:8px;}
+  .sold-strip{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;}
+  .sold-chip{
+    flex-shrink:0;width:120px;padding:10px;border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--void);text-align:center;
+  }
+  .sold-chip img{width:44px;height:44px;object-fit:cover;border-radius:2px;margin-bottom:6px;}
+  .sold-chip .n{font-size:.78rem;color:var(--bone);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sold-chip .p{font-size:.72rem;color:var(--gold-bright);margin-top:2px;}
+  .sold-chip .b{font-size:.68rem;color:var(--dim);}
+
+  /* ---------- Bidders roster ---------- */
+  .bidder-row{display:flex;justify-content:space-between;padding:8px 6px;font-size:.85rem;border-radius:var(--radius);}
+  .bidder-row.me{background:rgba(185,146,79,.1);}
+  .bidder-row .nm{color:var(--bone);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bidder-row .bg{color:var(--dim);font-variant-numeric:tabular-nums;}
+  .bidder-row.me .bg{color:var(--gold-bright);}
+
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--panel-raised);border:1px solid var(--gold);color:var(--bone);
+    padding:11px 20px;border-radius:var(--radius);font-size:.88rem;
+    box-shadow:0 8px 24px var(--shadow);z-index:100;
+  }
+
+  /* ---------- Captains' picks board ---------- */
+  .rosters-wrap{max-width:1400px;margin:0 auto;padding:26px 28px 40px;border-top:1px solid var(--line);}
+  .rosters-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-top:14px;}
+  .roster-col{background:var(--void);border:1px solid var(--line);border-radius:var(--radius);padding:14px;min-width:0;}
+  .roster-col .cap-name{font-family:var(--font-display);color:var(--gold-bright);font-size:1rem;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .roster-col .cap-budget{font-size:.75rem;color:var(--dim);margin-bottom:10px;}
+  .roster-col .pick{font-size:.82rem;padding:6px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:6px;}
+  .roster-col .pick:first-of-type{border-top:none;}
+  .roster-col .pick .pn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .roster-col .pick .pp{color:var(--gold-bright);flex-shrink:0;}
+  .roster-col .none{font-size:.78rem;color:var(--dim);font-style:italic;}
+  @media (max-width:980px){ .rosters-grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:560px){ .rosters-grid{grid-template-columns:1fr;} }
+
+  @media (max-width:980px){
+    main.layout{grid-template-columns:1fr;}
+    aside.queue-col, aside.side-col{border:none;border-top:1px solid var(--line);}
+    section.hero-col{order:-1;}
+    .queue-scroll{max-height:260px;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function(){
+"use strict";
+
+/* ============================= CONFIG ============================= */
+// Portfolio demo: intentionally disconnected from the original Firebase database.
+// All auction data is stored only in this browser (localStorage).
+const STARTING_BUDGET = 30000;
+const FIREBASE_CONFIGURED = true; // Demo mode is always available.
+const DEMO_PREFIX = "deepwoken_portfolio_demo_v1_";
+const db = null;
+
+const USERNAMES = [
+"whitedevvv","Kon4218","alfeyzzz","shiyrogane","Veiquiro",
+"spawncrystals","rkyc","card","Destroyerheroman","SNKDreazz94",
+"ddmewtwo","vxko","smothercloud","KittyOliviaaaaa",
+"patopizza456","LyonZ17","Arturek7","boundlessslove","migxvs","Drowze_e",
+"crazycarrot455","siilyguyy","RyanMassi2","lIIIlIlllIIIlIlIIIl","predictionmybeloved",
+"raulrivitas123","yustin1234567890","emrikfan18","Apollon0200","tommyleekinn",
+"Franky2","tekivm","DJ_Aswqe","Vymphia","PositiveKevinn","n5ase",
+"g9nklas","Kingdethboyleon","UhhSiiver","Bartek060606","shadow121121121",
+"counted"
+];
+
+// The 6 team captains who will be bidding. They are not part of the auction
+// pool above — this list is only used to build the "Captains' picks" board.
+const CAPTAIN_LIMIT = 6;
+
+// The first 6 people who successfully sign up as auctioneers become captains.
+const CAPTAINS = [];
+
+/* ============================= DEMO STORAGE ============================= */
+// Local-only data: no network database writes and no shared live sessions.
+async function sGet(key){
+  try { const v = localStorage.getItem(DEMO_PREFIX + key); return v === null ? null : JSON.parse(v); }
+  catch(e){ console.warn("Demo storage unavailable", e); return null; }
+}
+async function sSet(key, value){
+  try { localStorage.setItem(DEMO_PREFIX + key, JSON.stringify(value)); return true; }
+  catch(e){ console.warn("Demo storage unavailable", e); return false; }
+}
+function watch(key, onChange){ /* No shared realtime database in portfolio demo. */ }
+
+function fmt(n){ return Math.round(n).toLocaleString("en-US"); }
+function esc(s){ const d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML; }
+function initials(name){ return (name||"?").slice(0,2).toUpperCase(); }
+
+/* ============================= APP STATE ============================= */
+const state = {
+  screen: "role-select",   // role-select | admin-login | admin-dashboard | bidder-join | bidder-view
+  bidderName: null,
+  players: [],
+  meta: {},
+  bidders: {},
+  loaded: false,
+  toastTimer: null,
+  hideEntrants: (function(){ try{ return localStorage.getItem("dw_hideEntrants")==="1"; }catch(e){ return false; } })()
+};
+
+function shuffledUsernames(){
+  const arr = USERNAMES.slice();
+  for(let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function defaultPlayers(){
+  const order = shuffledUsernames();
+  return order.map((u,i)=>({
+    id:i, username:u, robloxId:null, avatarUrl:null,
+    status: i===0 ? "active" : "pending",
+    currentBid: i===0 ? 100 : 0,
+    highestBidder: null,
+    soldPrice: null, soldTo: null
+  }));
+}
+function defaultMeta(){
+  return { startingBid: 100, avatarsResolved:false, captains:[] };
+}
+
+async function ensureInit(){
+  let players = await sGet("dw_players");
+  if(!players || !Array.isArray(players) || players.length !== USERNAMES.length){
+    players = defaultPlayers();
+    await sSet("dw_players", players);
+  }
+  let meta = await sGet("dw_meta");
+  if(!meta){
+    meta = defaultMeta();
+    await sSet("dw_meta", meta);
+  }else if(!Array.isArray(meta.captains)){
+    meta = Object.assign({}, meta, {captains:[]});
+    await sSet("dw_meta", meta);
+  }
+  let bidders = await sGet("dw_bidders");
+  if(!bidders){ bidders = {}; await sSet("dw_bidders", bidders); }
+  state.players = players; state.meta = meta; state.bidders = bidders;
+}
+
+async function refreshAll(){
+  const [players, meta, bidders] = await Promise.all([sGet("dw_players"), sGet("dw_meta"), sGet("dw_bidders")]);
+  if(players) state.players = players;
+  if(meta) state.meta = meta;
+  if(bidders) state.bidders = bidders;
+}
+
+/* ============================= ROBLOX AVATAR RESOLUTION ============================= */
+async function fetchJSON(url, opts){
+  const res = await fetch(url, opts||{});
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  return res.json();
+}
+async function resolveOneUserId(username){
+  try{
+    const data = await fetchJSON("https://users.roblox.com/v1/users/search?keyword="+encodeURIComponent(username)+"&limit=10");
+    if(data && Array.isArray(data.data) && data.data.length){
+      const exact = data.data.find(u => (u.name||"").toLowerCase() === username.toLowerCase());
+      return (exact || data.data[0]).id;
+    }
+  }catch(e){ /* swallow - handled by caller via null */ }
+  return null;
+}
+async function resolveAvatarsIfNeeded(){
+  // External avatar fetching is disabled in this standalone portfolio demo.
+  return;
+}
+
+/* ============================= DERIVED HELPERS ============================= */
+function activePlayer(){ return state.players.find(p=>p.status==="active") || null; }
+function soldPlayers(){ return state.players.filter(p=>p.status==="sold"); }
+function pendingPlayers(){ return state.players.filter(p=>p.status==="pending"); }
+function myBudget(){ const b = state.bidders[state.bidderName]; return b ? b.budget : STARTING_BUDGET; }
+
+/* ============================= TOAST ============================= */
+function showToast(msg){
+  let el = document.getElementById("toast");
+  if(!el){
+    el = document.createElement("div"); el.id="toast"; el.className="toast";
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = "block";
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(()=>{ el.style.display="none"; }, 2600);
+}
+
+/* ============================= RENDER: SHARED PIECES ============================= */
+function avatarFrame(p, live){
+  const img = p && p.avatarUrl
+    ? '<img src="'+esc(p.avatarUrl)+'" alt="'+esc(p.username)+' avatar" />'
+    : '<div class="fallback">'+esc(initials(p ? p.username : "?"))+'</div>';
+  return '<div class="frame'+(live?" live":"")+'">'+img+
+    '<span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>'+
+    '</div>';
+}
+
+function heroMarkup(role){
+  const p = activePlayer();
+  if(!p){
+    const done = pendingPlayers().length===0;
+    return '<div class="empty-hero"><div class="sigil"></div><h2>'+(done?"The ledger is closed":"No lot selected")+'</h2>'+
+      '<p>'+(done?"All 48 fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
+  }
+  const lotNum = p.id+1;
+  let html = '<div class="lot-label">Lot '+lotNum+' of '+USERNAMES.length+'</div>';
+  html += avatarFrame(p, !!p.highestBidder);
+  html += '<h2 class="hero-name">'+esc(p.username)+'</h2>';
+  html += '<div class="bid-figures">'+
+    '<div class="item"><div class="label">Current bid</div><div class="value">'+fmt(p.currentBid)+'</div></div>'+
+    '<div class="item"><div class="label">Highest bidder</div><div class="value bidder">'+(p.highestBidder?esc(p.highestBidder):"— none yet —")+'</div></div>'+
+    '</div>';
+  return html;
+}
+
+function queueMarkup(clickable){
+  let html = '';
+  state.players.forEach(p=>{
+    const cls = p.status==="sold" ? "sold" : p.status==="skipped" ? "skipped" : p.status==="active" ? "active" : "";
+    const click = clickable && p.status==="pending" ? ' clickable" data-action="admin-select-lot" data-id="'+p.id+'"' : '"';
+    html += '<div class="lot-row '+cls+click+'>'+
+      '<span class="num">'+(p.id+1)+'</span><span class="name">'+esc(p.username)+'</span></div>';
+  });
+  return html;
+}
+
+function queueBoxMarkup(){
+  if(state.hideEntrants){
+    return '<div class="hint" style="padding:24px 6px;text-align:center;">Entrants hidden from this screen.<br>Click "Show" to reveal.</div>';
+  }
+  return queueMarkup(true);
+}
+
+function soldStripMarkup(){
+  const sold = soldPlayers();
+  if(!sold.length) return '<p class="hint">Nothing sold yet.</p>';
+  return '<div class="sold-strip">'+sold.map(p=>{
+    const img = p.avatarUrl ? '<img src="'+esc(p.avatarUrl)+'" alt="" />' : '<div class="fallback" style="width:44px;height:44px;font-size:1rem;margin:0 auto 6px;">'+esc(initials(p.username))+'</div>';
+    return '<div class="sold-chip">'+img+'<div class="n">'+esc(p.username)+'</div>'+
+      '<div class="p">'+fmt(p.soldPrice)+' notes</div><div class="b">'+esc(p.soldTo||"—")+'</div></div>';
+  }).join("")+'</div>';
+}
+
+function captainNames(){
+  return Array.isArray(state.meta.captains)
+    ? state.meta.captains.slice(0, CAPTAIN_LIMIT)
+    : [];
+}
+
+function rostersMarkup(){
+  const captains = captainNames();
+  if(!captains.length){
+    return '<p class="hint">No captains have joined yet. The first 6 auctioneers become captains.</p>';
+  }
+  return '<div class="rosters-grid">'+captains.map(cap=>{
+    const b = state.bidders[cap];
+    const budgetLine = b ? (fmt(b.budget)+' notes left') : 'not joined yet';
+    const picks = state.players.filter(p=>p.status==="sold" && (p.soldTo||"").toLowerCase()===cap.toLowerCase());
+    const picksHtml = picks.length
+      ? picks.map(p=>'<div class="pick"><span class="pn">'+esc(p.username)+'</span><span class="pp">'+fmt(p.soldPrice)+'</span></div>').join("")
+      : '<div class="none">No picks yet</div>';
+    return '<div class="roster-col"><div class="cap-name">'+esc(cap)+'</div><div class="cap-budget">'+budgetLine+'</div>'+picksHtml+'</div>';
+  }).join("")+'</div>';
+}
+
+function biddersListMarkup(highlightName){
+  const names = Object.keys(state.bidders);
+  if(!names.length) return '<p class="hint">No auctioneers have joined yet.</p>';
+  return names.sort().map(n=>{
+    const b = state.bidders[n];
+    return '<div class="bidder-row'+(n===highlightName?" me":"")+'"><span class="nm">'+esc(n)+'</span><span class="bg">'+fmt(b.budget)+'</span></div>';
+  }).join("");
+}
+
+/* ============================= SCREENS ============================= */
+function render(){
+  const app = document.getElementById("app");
+  if(state.screen === "role-select") app.innerHTML = roleSelectScreen();
+  else if(state.screen === "admin-login") app.innerHTML = adminLoginScreen();
+  else if(state.screen === "admin-dashboard") app.innerHTML = adminDashboardScreen();
+  else if(state.screen === "bidder-join") app.innerHTML = bidderJoinScreen();
+  else if(state.screen === "bidder-view") app.innerHTML = bidderViewScreen();
+  attachOnce();
+}
+
+function rerenderDynamic(){
+  if(state.screen === "admin-dashboard"){
+    const heroEl = document.getElementById("heroBox"); if(heroEl) heroEl.innerHTML = heroMarkup("admin");
+    const qEl = document.getElementById("queueBox"); if(qEl) qEl.innerHTML = queueBoxMarkup();
+    const sEl = document.getElementById("soldBox"); if(sEl) sEl.innerHTML = soldStripMarkup();
+    const bEl = document.getElementById("biddersBox"); if(bEl) bEl.innerHTML = biddersListMarkup(null);
+    const lc = document.getElementById("lotCount"); if(lc) lc.textContent = lotCountText();
+    const rEl = document.getElementById("rostersBox"); if(rEl) rEl.innerHTML = rostersMarkup();
+    refreshAssignSelect();
+  } else if(state.screen === "bidder-view"){
+    const heroEl = document.getElementById("heroBox"); if(heroEl) heroEl.innerHTML = heroMarkup("bidder");
+    const rcEl = document.getElementById("remainingCount"); if(rcEl) rcEl.textContent = remainingCountText();
+    const sEl = document.getElementById("soldBox"); if(sEl) sEl.innerHTML = soldStripMarkup();
+    const bEl = document.getElementById("biddersBox"); if(bEl) bEl.innerHTML = biddersListMarkup(state.bidderName);
+    const purse = document.getElementById("purseVal"); if(purse) purse.textContent = fmt(myBudget())+" notes";
+    const lc = document.getElementById("lotCount"); if(lc) lc.textContent = lotCountText();
+    const rEl = document.getElementById("rostersBox"); if(rEl) rEl.innerHTML = rostersMarkup();
+    refreshQuickBidButtons();
+  }
+}
+
+function remainingCountText(){
+  const remaining = pendingPlayers().length;
+  return remaining+' lot'+(remaining===1?"":"s")+' still to come — kept secret until they\'re called';
+}
+
+function lotCountText(){
+  const p = activePlayer();
+  return p ? ("Lot "+(p.id+1)+" of "+USERNAMES.length) : (pendingPlayers().length===0 ? "Auction complete" : "Awaiting next lot");
+}
+
+function refreshAssignSelect(){
+  const sel = document.getElementById("assignBidderSelect");
+  if(!sel) return;
+  const cur = sel.value;
+  const names = Object.keys(state.bidders).sort();
+  sel.innerHTML = '<option value="">— select auctioneer —</option>'+names.map(n=>'<option value="'+esc(n)+'">'+esc(n)+'</option>').join("");
+  if(names.includes(cur)) sel.value = cur;
+}
+function refreshQuickBidButtons(){
+  const p = activePlayer();
+  const box = document.getElementById("quickBidsBox");
+  if(!box) return;
+  if(!p){ box.innerHTML=""; return; }
+  const budget = myBudget();
+  const steps = [100,250,500,1000];
+  box.innerHTML = steps.map(s=>{
+    const amt = p.currentBid + s;
+    const disabled = amt > budget;
+    return '<button data-action="bidder-quick-bid" data-amt="'+amt+'" '+(disabled?"disabled":"")+'>+'+s+' → '+fmt(amt)+'</button>';
+  }).join("");
+}
+
+function roleSelectScreen(){
+  const banner = '<div class="setup-banner" style="border-color:var(--verdigris);color:var(--bone);background:rgba(92,139,122,.1)">Portfolio demo — data stays in this browser. Open another browser to see an independent session; live multiplayer is not enabled.</div>';
+  return '<div class="gate"><div class="gate-card panel">'+
+    '<div class="sigil"></div>'+
+    '<h1>The Deepwoken Draft</h1>'+
+    '<p class="tag">6 captain seats. One ledger. Spend your notes wisely.</p>'+
+    banner+
+    '<div class="stack">'+
+      '<button class="btn btn-gold" data-action="goto-admin-login">Open demo host dashboard</button>'+
+      '<button class="btn" data-action="goto-bidder-join">Join demo auction</button>'+
+    '</div>'+
+    '<p class="hint" style="margin-top:22px;">Portfolio demonstration. No real money or shared auction data.</p>'+
+    '</div></div>';
+}
+
+function adminLoginScreen(){
+  return '<div class="gate"><div class="gate-card panel">'+
+    '<div class="sigil"></div>'+
+    '<h1>Host access</h1>'+
+    '<p class="tag">This is a local portfolio demo. Host controls are available without a password.</p>'+
+    
+    '<div id="loginError" class="error-msg"></div>'+
+    '<button class="btn btn-gold" data-action="submit-admin-login">Open dashboard</button>'+
+    '<a class="back-link" data-action="goto-role-select" href="#">← back</a>'+
+    '</div></div>';
+}
+
+function bidderJoinScreen(){
+  const captains = captainNames();
+  const full = captains.length >= CAPTAIN_LIMIT;
+
+  return '<div class="gate"><div class="gate-card panel">'+
+    '<div class="sigil"></div>'+
+    '<h1>Join the draft</h1>'+
+    '<p class="tag">'+(full
+      ? 'All 6 captain seats are filled. No more auctioneers can join.'
+      : 'Sign up as an auctioneer. The first 6 people to join become captains and get '+fmt(STARTING_BUDGET)+' notes.')+'</p>'+
+    (!full
+      ? '<div class="field"><label for="auctioneerNameInput">Auctioneer name</label><input id="auctioneerNameInput" maxlength="40" autocomplete="off" placeholder="Enter your name" /></div>'+
+        '<div id="joinError" class="error-msg"></div>'+
+        '<button class="btn btn-gold" data-action="signup-auctioneer">Sign up as auctioneer</button>'
+      : '')+
+    (captains.length
+      ? '<div style="margin-top:24px;text-align:left"><div class="col-heading">Captain seats ('+captains.length+'/6)</div>'+
+        '<div class="stack">'+captains.map(cap=>
+          '<button class="btn btn-sm" data-action="pick-captain" data-name="'+esc(cap)+'">'+esc(cap)+'</button>'
+        ).join("")+'</div></div>'
+      : '')+
+    '<a class="back-link" data-action="goto-role-select" href="#">← back</a>'+
+    '</div></div>';
+}
+
+function adminDashboardScreen(){
+  return topBar("admin") +
+    '<main class="layout">'+
+      '<aside class="queue-col"><div class="col-heading" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'+
+        '<span>Lots — '+USERNAMES.length+' total</span>'+
+        '<button class="btn btn-ghost btn-sm" id="entrantsToggleBtn" style="width:auto;padding:4px 10px;" data-action="admin-toggle-entrants">'+(state.hideEntrants?"Show":"Hide")+'</button>'+
+        '</div>'+
+        '<div class="queue-scroll" id="queueBox">'+queueBoxMarkup()+'</div></aside>'+
+      '<section class="hero-col"><div class="hero-wrap">'+
+        '<div id="heroBox">'+heroMarkup("admin")+'</div>'+
+        '<div class="divider-flourish"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>'+
+        adminPanelMarkup()+
+        '</div>'+
+        '<div class="sold-strip-wrap"><div class="col-heading">Sold</div><div id="soldBox">'+soldStripMarkup()+'</div></div>'+
+      '</section>'+
+      '<aside class="side-col"><div class="col-heading">Auctioneers</div><div id="biddersBox">'+biddersListMarkup(null)+'</div></aside>'+
+    '</main>'+
+    '<div class="rosters-wrap"><div class="col-heading">Captains&#8217; picks</div><div id="rostersBox">'+rostersMarkup()+'</div></div>';
+}
+
+function adminPanelMarkup(){
+  return '<div class="admin-panel panel">'+
+    '<div class="row">'+
+      '<input id="startingBidInput" type="number" min="0" placeholder="Opening bid for next lot" value="'+state.meta.startingBid+'" />'+
+      '<button class="btn btn-sm" data-action="admin-set-starting-bid">Set</button>'+
+    '</div>'+
+    '<div class="row">'+
+      '<input id="customBidInput" type="number" min="0" placeholder="Custom bid amount" />'+
+      '<select id="assignBidderSelect"></select>'+
+      '<button class="btn btn-sm" data-action="admin-set-bid">Record bid</button>'+
+    '</div>'+
+    '<div class="admin-actions">'+
+      '<button class="btn btn-sold" data-action="admin-mark-sold">Mark sold</button>'+
+      '<button class="btn" data-action="admin-skip-lot">Skip lot</button>'+
+      '<button class="btn btn-next" data-action="admin-next-lot">Next lot</button>'+
+    '</div>'+
+    '<div class="admin-actions">'+
+      '<button class="btn btn-danger btn-sm" data-action="admin-resolve-avatars">Re-fetch avatars</button>'+
+      '<button class="btn btn-danger btn-sm" data-action="admin-reset-auction">Reset entire draft</button>'+
+    '</div>'+
+  '</div>';
+}
+
+function bidderViewScreen(){
+  return topBar("bidder") +
+    '<main class="layout layout-2col">'+
+      '<section class="hero-col"><div class="hero-wrap">'+
+        '<div id="heroBox">'+heroMarkup("bidder")+'</div>'+
+        '<div class="divider-flourish"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>'+
+        '<div class="controls-block">'+
+          '<div class="quick-bids" id="quickBidsBox"></div>'+
+          '<div class="custom-bid-row"><input id="customBidderAmt" type="number" placeholder="Custom amount" />'+
+            '<button class="btn btn-gold btn-sm" data-action="bidder-custom-bid">Place bid</button></div>'+
+          '<p class="hint">Bids are final once the host marks a lot sold.</p>'+
+        '</div>'+
+        '</div>'+
+        '<div class="sold-strip-wrap"><div class="col-heading">Sold</div><p class="hint" id="remainingCount" style="margin:-6px 0 12px;">'+remainingCountText()+'</p><div id="soldBox">'+soldStripMarkup()+'</div></div>'+
+      '</section>'+
+      '<aside class="side-col"><div class="col-heading">Auctioneers</div><div id="biddersBox">'+biddersListMarkup(state.bidderName)+'</div></aside>'+
+    '</main>'+
+    '<div class="rosters-wrap"><div class="col-heading">Captains&#8217; picks</div><div id="rostersBox">'+rostersMarkup()+'</div></div>';
+}
+
+function topBar(role){
+  return '<header class="top"><div class="title"><div class="sigil"></div><div><h1>The Deepwoken Draft</h1>'+
+    '<div class="lot-count" id="lotCount">'+lotCountText()+'</div></div></div>'+
+    '<div class="who">'+
+      (role==="bidder" ? ('<span>'+esc(state.bidderName)+'</span><span class="purse" id="purseVal">'+fmt(myBudget())+' notes</span>') : '<span>Host</span>')+
+      '<button class="btn btn-ghost btn-sm" data-action="goto-role-select">Leave</button>'+
+    '</div></header>';
+}
+
+/* ============================= EVENT DELEGATION ============================= */
+let delegated = false;
+function attachOnce(){
+  if(delegated) return;
+  delegated = true;
+  document.addEventListener("click", async (e)=>{
+    const el = e.target.closest("[data-action]");
+    if(!el) return;
+    e.preventDefault();
+    const action = el.getAttribute("data-action");
+
+    if(action === "goto-role-select"){ state.screen="role-select"; state.bidderName=null; render(); }
+    else if(action === "goto-admin-login"){ state.screen="admin-login"; render();  }
+    else if(action === "goto-bidder-join"){ state.screen="bidder-join"; render(); setTimeout(()=>{const i=document.getElementById("auctioneerNameInput"); if(i) i.focus();},0); }
+
+    else if(action === "submit-admin-login"){
+      
+      await refreshAll(); state.screen="admin-dashboard"; render();
+    }
+
+    else if(action === "signup-auctioneer"){
+      const input = document.getElementById("auctioneerNameInput");
+      const error = document.getElementById("joinError");
+      const name = (input && input.value || "").trim();
+
+      if(!name){
+        if(error) error.textContent = "Enter your auctioneer name.";
+        return;
+      }
+
+      await refreshAll();
+
+      // Re-read the latest captain list before accepting the signup.
+      const latestMeta = await sGet("dw_meta") || defaultMeta();
+      const captains = Array.isArray(latestMeta.captains)
+        ? latestMeta.captains.slice(0, CAPTAIN_LIMIT)
+        : [];
+
+      if(captains.length >= CAPTAIN_LIMIT){
+        showToast("All 6 captain seats are filled.");
+        render();
+        return;
+      }
+
+      const existing = Object.keys(state.bidders || {});
+      if(existing.some(n => n.toLowerCase() === name.toLowerCase())){
+        if(error) error.textContent = "That auctioneer has already signed up.";
+        return;
+      }
+
+      const newCaptains = captains.concat(name).slice(0, CAPTAIN_LIMIT);
+      const meta = Object.assign({}, latestMeta, {captains:newCaptains});
+      const bidders = Object.assign({}, state.bidders, {
+        [name]: { budget: STARTING_BUDGET, won: [] }
+      });
+
+      await sSet("dw_meta", meta);
+      await sSet("dw_bidders", bidders);
+
+      state.meta = meta;
+      state.bidders = bidders;
+      state.bidderName = name;
+      state.screen = "bidder-view";
+      render();
+    }
+
+    else if(action === "pick-captain"){
+      const name = el.getAttribute("data-name");
+      await refreshAll();
+      const captains = captainNames();
+
+      if(!captains.some(c => c.toLowerCase() === name.toLowerCase())){
+        showToast("That captain seat is no longer available.");
+        render();
+        return;
+      }
+
+      const bidders = Object.assign({}, state.bidders);
+      if(!bidders[name]) bidders[name] = { budget: STARTING_BUDGET, won: [] };
+      await sSet("dw_bidders", bidders);
+      state.bidders = bidders;
+      state.bidderName = name;
+      state.screen = "bidder-view";
+      render();
+    }
+
+    else if(action === "admin-select-lot"){
+      const id = Number(el.getAttribute("data-id"));
+      await refreshAll();
+      const players = state.players.map(p=>{
+        if(p.status==="active") return Object.assign({}, p, {status:"pending"});
+        if(p.id===id && p.status==="pending") return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null});
+        return p;
+      });
+      await sSet("dw_players", players);
+      state.players = players;
+      rerenderDynamic();
+    }
+
+    else if(action === "admin-set-starting-bid"){
+      const v = Number((document.getElementById("startingBidInput")||{}).value || 0);
+      const meta = Object.assign({}, state.meta, {startingBid: v});
+      await sSet("dw_meta", meta);
+      state.meta = meta;
+      showToast("Opening bid set to "+fmt(v)+" notes");
+    }
+
+    else if(action === "admin-set-bid"){
+      await refreshAll();
+      const p = activePlayer();
+      if(!p){ showToast("No active lot."); return; }
+      const amt = Number((document.getElementById("customBidInput")||{}).value || 0);
+      const who = (document.getElementById("assignBidderSelect")||{}).value || "";
+      if(!amt || amt<=0){ showToast("Enter a bid amount."); return; }
+      const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {currentBid: amt, highestBidder: who || pl.highestBidder}) : pl);
+      await sSet("dw_players", players);
+      state.players = players;
+      rerenderDynamic();
+      showToast("Bid recorded: "+fmt(amt)+" notes"+(who?" — "+who:""));
+    }
+
+    else if(action === "admin-mark-sold"){
+      await refreshAll();
+      const p = activePlayer();
+      if(!p){ showToast("No active lot."); return; }
+      if(!p.highestBidder){ if(!confirm("No highest bidder set — mark this lot sold with no buyer recorded?")){ return; } }
+      const players = state.players.slice();
+      const bidders = Object.assign({}, state.bidders);
+      const idx = players.findIndex(pl=>pl.id===p.id);
+      players[idx] = Object.assign({}, p, {status:"sold", soldPrice:p.currentBid, soldTo:p.highestBidder});
+      if(p.highestBidder){
+        const b = bidders[p.highestBidder] || {budget:STARTING_BUDGET, won:[]};
+        bidders[p.highestBidder] = Object.assign({}, b, {budget: b.budget - p.currentBid, won: (b.won||[]).concat([p.id])});
+      }
+      await sSet("dw_players", players);
+      await sSet("dw_bidders", bidders);
+      state.players = players; state.bidders = bidders;
+      rerenderDynamic();
+      showToast(esc(p.username)+" sold for "+fmt(p.currentBid)+" notes");
+    }
+
+    else if(action === "admin-skip-lot"){
+      await refreshAll();
+      const p = activePlayer();
+      if(!p) return;
+      const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {status:"skipped"}) : pl);
+      await sSet("dw_players", players);
+      state.players = players;
+      rerenderDynamic();
+    }
+
+    else if(action === "admin-next-lot"){
+      await refreshAll();
+      const next = state.players.find(p=>p.status==="pending");
+      const players = state.players.map(p=>{
+        if(p.status==="active") return p; // leave as-is; host should mark sold/skip first
+        if(next && p.id===next.id) return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null});
+        return p;
+      });
+      await sSet("dw_players", players);
+      state.players = players;
+      rerenderDynamic();
+      if(!next) showToast("No lots remaining.");
+    }
+
+    else if(action === "admin-toggle-entrants"){
+      state.hideEntrants = !state.hideEntrants;
+      try{ localStorage.setItem("dw_hideEntrants", state.hideEntrants ? "1" : "0"); }catch(err){}
+      const qEl = document.getElementById("queueBox"); if(qEl) qEl.innerHTML = queueBoxMarkup();
+      const btn = document.getElementById("entrantsToggleBtn"); if(btn) btn.textContent = state.hideEntrants ? "Show" : "Hide";
+    }
+
+    else if(action === "admin-resolve-avatars"){
+      const meta = Object.assign({}, state.meta, {avatarsResolved:false});
+      await sSet("dw_meta", meta);
+      state.meta = meta;
+      showToast("Re-fetching Roblox avatars…");
+      resolveAvatarsIfNeeded();
+    }
+
+    else if(action === "admin-reset-auction"){
+      if(!confirm("Reset the entire draft? All bids, sales, and auctioneer budgets will be cleared. This cannot be undone.")) return;
+      if(!confirm("Really sure? This wipes everything back to lot 1.")) return;
+      const players = defaultPlayers();
+      const meta = defaultMeta();
+      await sSet("dw_players", players);
+      await sSet("dw_meta", meta);
+      await sSet("dw_bidders", {});
+      state.players = players; state.meta = meta; state.bidders = {};
+      rerenderDynamic();
+      resolveAvatarsIfNeeded();
+      showToast("Draft reset.");
+    }
+
+    else if(action === "bidder-quick-bid"){
+      const amt = Number(el.getAttribute("data-amt"));
+      await placeBid(amt);
+    }
+    else if(action === "bidder-custom-bid"){
+      const amt = Number((document.getElementById("customBidderAmt")||{}).value || 0);
+      if(!amt){ showToast("Enter an amount to bid."); return; }
+      await placeBid(amt);
+    }
+  });
+}
+
+async function placeBid(amt){
+  await refreshAll();
+  const p = activePlayer();
+  if(!p){ showToast("No active lot to bid on."); return; }
+  if(amt <= p.currentBid){ showToast("Your bid must beat the current bid of "+fmt(p.currentBid)+"."); return; }
+  const budget = myBudget();
+  if(amt > budget){ showToast("You only have "+fmt(budget)+" notes remaining."); return; }
+  const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {currentBid:amt, highestBidder: state.bidderName}) : pl);
+  await sSet("dw_players", players);
+  state.players = players;
+  rerenderDynamic();
+  showToast("Bid placed: "+fmt(amt)+" notes");
+}
+
+/* ============================= INIT & LIVE SYNC ============================= */
+async function init(){
+  if(!FIREBASE_CONFIGURED){
+    render(); // shows the setup banner on the role-select screen
+    return;
+  }
+  await ensureInit();
+  render();
+  resolveAvatarsIfNeeded();
+  // No cross-device listeners: this is a local-only demonstration.
+}
+init();
+
+})();
+</script>
+</body>
+</html>
