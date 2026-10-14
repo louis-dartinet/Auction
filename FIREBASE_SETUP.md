@@ -32,3 +32,17 @@ Deploy the complete folder containing index.html and _redirects, rather than jus
 On the host dashboard, enter a numeric Roblox user ID or profile URL, then Add / update fighter. The real Roblox username and headshot are fetched automatically. The default option matches an existing username or adds a new pending lot; alternatively, choose an unbid lot to update. Duplicate user IDs are rejected. If Roblox has not generated a thumbnail or blocks it, initials appear and the host can retry Refresh current avatar. Resetting the draft retains configured fighter names, Roblox IDs, and avatars.
 
 Avatars require the Netlify proxy: GitHub Pages alone does not implement _redirects. Live Roblox/Netlify lookup has not been verified from the agent browser.
+
+## Bulk imports, removal and team limits
+
+New drafts start with an empty fighter list. An existing draft keeps its data until the host chooses Clear fighter list or imports with Replace entire list.
+
+Open Bulk import & fighter list on the host dashboard. Paste IDs separated by lines, commas or spaces, paste profile links, or choose a JSON file. Supported JSON formats are an array of IDs, an array of objects with robloxId/userId/id, or {"players": [...]} . Preview resolves public Roblox usernames and avatars in batches of up to 100. Missing or banned users and duplicate input IDs are excluded with an explanation; the preview does not write to Firebase. Up to 500 input entries are accepted per import. Confirm the preview with Add to current list or Replace entire list; replacement cancels the current round and refunds all existing sales while retaining captain seats.
+
+Search and select fighters for bulk removal, or use Remove on one row. Removing an active fighter cancels its bids. Removing a sold fighter refunds its price and frees its captain's team slot. Clear fighter list removes all fighters. Undo last list change restores the previous list only while bids and fighter details are unchanged; a previously running restored round is paused. IDs remain unique after deletion and list replacement.
+
+Host tools also include Shuffle pending queue, Requeue unsold, Refund / requeue on a sold fighter, and +5 seconds for a running or paused round. Reopening a sale refunds it and returns the fighter to the pending queue.
+
+Each captain may own at most 12 fighters. Bid buttons, client checks, settlement logic, and database rules enforce the limit. Publish the updated database.rules.json, even if you previously published an earlier version. A host action such as pause/resume recomputes rosterCount for existing captains; new captain approval does this automatically. Until that count exists, the updated rules reject that captain's bids.
+
+Local tests cover bulk parsing, refunds and undo, stable IDs, sparse Firebase data, the 12-player cap and core auction transitions. Live Netlify proxy and multi-device Firebase testing remain pending.
