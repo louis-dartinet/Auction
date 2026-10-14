@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>The Deepwoken Draft — Portfolio Demo</title>
+<title>The Deepwoken Draft — Live Auction</title>
 <style>
   :root{
     --void:#0a0e0f;
@@ -261,22 +261,52 @@
     section.hero-col{order:-1;}
     .queue-scroll{max-height:260px;}
   }
+
+/* Parchment and charcoal, inspired by the D1 signup panel. */
+:root{--panel:#dedfce;--panel-raised:#e9e9db;--line:#a8aa95;--bone:#252b24;--dim:#626855;--gold:#66734d;--gold-bright:#394b2e;--verdigris:#557e61;--void:#10191b;--radius:2px;}
+body{background:radial-gradient(ellipse at 15% 0%,#334c49 0,transparent 55%),linear-gradient(135deg,#192729,#0d1517);color:#dddfd0;}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(115deg,transparent 0 90px,#9bac9910 91px 92px);z-index:-1;}
+.gate-card{max-width:640px;padding:48px!important;border:12px solid #202621;outline:1px solid #84907b;box-shadow:0 28px 70px #0007;color:var(--bone);}
+.panel,.hero-wrap,.queue-col,.side-col,.rosters-wrap,.sold-strip-wrap{color:var(--bone);}
+.hero-wrap{background:linear-gradient(145deg,#e5e5d6,#cdcfbd);border:10px solid #202621;outline:1px solid #64725e;padding:30px;}
+.queue-col,.side-col,.rosters-wrap,.sold-strip-wrap{background:#d9dbca;padding:20px;border:1px solid #8f987f;}
+h1,h2,.hero-name{font-family:var(--font-display);font-weight:500;letter-spacing:-.025em;}
+.gate h1{font-size:clamp(36px,6vw,56px);}.hero-name{font-size:clamp(30px,4vw,48px);}
+.btn-gold,.btn-next,.btn-sold{background:#35472e!important;color:#f0f0df!important;border-color:#35472e!important;}
+.btn{border-radius:2px;}.btn:hover{filter:brightness(1.08);transform:translateY(-1px);}.btn:disabled{opacity:.45;transform:none;cursor:not-allowed;}
+.rules-strip{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:24px 0;}.rules-strip span{border:1px solid #9fa58e;padding:7px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;}
+.round-clock{margin:22px auto 10px;max-width:430px;text-align:left;}.clock-head{display:flex;align-items:baseline;justify-content:space-between;font-size:11px;letter-spacing:.13em;text-transform:uppercase;}.clock-head strong{font:42px var(--font-display);letter-spacing:0;}.clock-track{height:5px;background:#b1b7a1;margin:8px 0 12px;}.clock-fill{height:100%;background:#456541;transition:width .15s linear;}.round-clock.urgent .clock-fill{background:#ad4a37;}.round-clock.urgent strong{color:#a23829;}.round-clock small{color:#59614d;letter-spacing:0;}
+.bid-history{max-width:430px;margin:22px auto 0;text-align:left;border-top:1px solid #a8ad96;padding-top:14px;}.history-row{display:flex;justify-content:space-between;padding:7px 0;font-size:13px;border-bottom:1px solid #afb49e55;}.history-row span{color:#59614d;}.history-row b{font-variant-numeric:tabular-nums;}.admin-actions{flex-wrap:wrap;}.top{background:#121c1d;color:#e2e3d4;}.top .lot-count,.top h1{color:#e2e3d4;}.setup-banner{color:#465340!important;background:#cad0b9!important;border-color:#8c977c!important;}.roster-col{background:#e5e6d7!important;}.bidder-row.me{background:#bdc8ac!important;}input,select{color:#232b21!important;background:#f0f0e5!important;border-color:#9ba58c!important;}input::placeholder{color:#7a806d;}.hint{color:#606852;}.col-heading{color:#46553c;}.lot-row.active{background:#b9c5a6;}.value{color:#33472c!important;}.frame .fallback{background:#b5bfa5;color:#33452f;}.toast{background:#202d23!important;color:#e8eadc!important;}.gate-card .sigil{margin-bottom:22px;}
+@media(max-width:700px){.gate-card{padding:26px!important;margin:16px;}.hero-wrap{padding:20px;border-width:6px;}.clock-head strong{font-size:34px;}.layout{gap:16px;}.queue-col{max-height:260px;overflow:auto;}}
+
 </style>
 </head>
 <body>
 <div id="app"></div>
+<script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.4.0/firebase-database-compat.js"></script>
 <script>
 (function(){
 "use strict";
 
 /* ============================= CONFIG ============================= */
-// Portfolio demo: intentionally disconnected from the original Firebase database.
-// All auction data is stored only in this browser (localStorage).
 const STARTING_BUDGET = 30000;
-const FIREBASE_CONFIGURED = true; // Demo mode is always available.
-const DEMO_PREFIX = "deepwoken_portfolio_demo_v1_";
-const db = null;
-
+const FIREBASE_CONFIGURED = true;
+const firebaseConfig = {
+ apiKey:"AIzaSyAc4cYZMRnWZFfGsLR3IsnMFShnRrSYorM",
+ authDomain:"pufferfish-conquest.firebaseapp.com",
+ databaseURL:"https://pufferfish-conquest-default-rtdb.europe-west1.firebasedatabase.app",
+ projectId:"pufferfish-conquest",
+ storageBucket:"pufferfish-conquest.firebasestorage.app",
+ messagingSenderId:"288205614089",
+ appId:"1:288205614089:web:0f6c4005ff25de4db75cd8",
+ measurementId:"G-B94RM6469B"
+};
+let db,auth,sessionRef,currentUser=null,isHost=false,connected=false,offset=0,clockReady=false;
+let requests={},setupError="",unsubSession=null;
+const ROOT="deepwokenV2";
+function serverNow(){return Math.round(Date.now()+offset);}
 const USERNAMES = [
 "whitedevvv","Kon4218","alfeyzzz","shiyrogane","Veiquiro",
 "spawncrystals","rkyc","card","Destroyerheroman","SNKDreazz94",
@@ -296,20 +326,8 @@ const CAPTAIN_LIMIT = 6;
 // The first 6 people who successfully sign up as auctioneers become captains.
 const CAPTAINS = [];
 
-/* ============================= DEMO STORAGE ============================= */
-// Local-only data: no network database writes and no shared live sessions.
-async function sGet(key){
-  try { const v = localStorage.getItem(DEMO_PREFIX + key); return v === null ? null : JSON.parse(v); }
-  catch(e){ console.warn("Demo storage unavailable", e); return null; }
-}
-async function sSet(key, value){
-  try { localStorage.setItem(DEMO_PREFIX + key, JSON.stringify(value)); return true; }
-  catch(e){ console.warn("Demo storage unavailable", e); return false; }
-}
-function watch(key, onChange){ /* No shared realtime database in portfolio demo. */ }
-
 function fmt(n){ return Math.round(n).toLocaleString("en-US"); }
-function esc(s){ const d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML; }
+function esc(s){ const d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML.replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 function initials(name){ return (name||"?").slice(0,2).toUpperCase(); }
 
 /* ============================= APP STATE ============================= */
@@ -347,33 +365,69 @@ function defaultMeta(){
   return { startingBid: 100, avatarsResolved:false, captains:[] };
 }
 
-async function ensureInit(){
-  let players = await sGet("dw_players");
-  if(!players || !Array.isArray(players) || players.length !== USERNAMES.length){
-    players = defaultPlayers();
-    await sSet("dw_players", players);
-  }
-  let meta = await sGet("dw_meta");
-  if(!meta){
-    meta = defaultMeta();
-    await sSet("dw_meta", meta);
-  }else if(!Array.isArray(meta.captains)){
-    meta = Object.assign({}, meta, {captains:[]});
-    await sSet("dw_meta", meta);
-  }
-  let bidders = await sGet("dw_bidders");
-  if(!bidders){ bidders = {}; await sSet("dw_bidders", bidders); }
-  state.players = players; state.meta = meta; state.bidders = bidders;
+function decode(raw){
+  const bidders={};
+  for(const [uid,b] of Object.entries(raw?.bidders||{}))bidders[b.name]={...b,uid};
+  const players=Object.values(raw?.players||{}).map(p=>({...p,highestBidder:p.highestBidder||null,history:historyFromAudit(p)})).sort((a,b)=>a.id-b.id);
+  return {players,meta:{...(raw?.meta||defaultMeta()),captains:Object.keys(bidders)},bidders};
 }
-
-async function refreshAll(){
-  const [players, meta, bidders] = await Promise.all([sGet("dw_players"), sGet("dw_meta"), sGet("dw_bidders")]);
-  if(players) state.players = players;
-  if(meta) state.meta = meta;
-  if(bidders) state.bidders = bidders;
+function encode(model){
+  const players={},bidders={};
+  for(const p of model.players){const {history,...plain}=p;players[p.id]=plain;}
+  for(const [name,b] of Object.entries(model.bidders)){const {uid,won,...plain}=b;bidders[uid]={...plain,name};}
+  const {captains,...meta}=model.meta;
+  return JSON.parse(JSON.stringify({players,bidders,meta}));
 }
+function applyRaw(raw){
+  const model=decode(raw);state.players=model.players;state.meta=model.meta;state.bidders=model.bidders;
+  const mine=Object.entries(state.bidders).find(([name,b])=>b.uid===currentUser?.uid);
+  if(mine)state.bidderName=mine[0];
+  state.loaded=!!raw;
+}
+function historyFromAudit(p){
+  let previous=p.openingBid||100,previousBidder=null;
+  return (p.audit||"").split("\n").filter(Boolean).map(line=>{
+    const [amount,uid,at]=line.split("|");
+    const who=Object.values(state.bidders||{}).find(b=>b.uid===uid)?.name||uid.slice(0,8);
+    const bid={amount:Number(amount),who,uid,at:Number(at),previousBid:previous,previousBidder};
+    previous=bid.amount;previousBidder=who;return bid;
+  });
+}
+async function refreshAll(){if(!sessionRef)return;applyRaw((await sessionRef.get()).val());}
+function hostRequired(){if(!isHost)throw Error("This account is not a host.");if(!connected||!clockReady)throw Error("Wait for the live connection.");}
+async function hostMutate(fn){
+  hostRequired();let reason="";
+  const result=await sessionRef.transaction(raw=>{
+    if(!raw){reason="Initialise the draft first.";return;}
+    const model=decode(raw);const outcome=fn(model,serverNow());
+    if(outcome===false)return;
+    return encode(model);
+  },undefined,false);
+  if(result.committed)applyRaw(result.snapshot.val());
+  else if(reason)throw Error(reason);
+  rerenderDynamic();return result.committed;
+}
+function reconcile(model){
+  for(const [name,b] of Object.entries(model.bidders)){
+    const picks=model.players.filter(p=>p.status==="sold"&&p.soldTo===name);
+    b.budget=STARTING_BUDGET-picks.reduce((n,p)=>n+p.soldPrice,0);
+  }
+}
+function initialiseModel(){
+  return {players:defaultPlayers().map(p=>({...p,roundState:"ready",audit:"",openingBid:p.currentBid||100})),meta:{...defaultMeta(),registrationOpen:true},bidders:{}};
+}
+function activeIn(model){return model.players.find(p=>p.status==="active");}
+function settle(model,p){
+  if(!p||p.status!=="active")return;
+  if(p.highestBidder){
+    const b=model.bidders[p.highestBidder];
+    if(!b||b.budget<p.currentBid){p.roundState="paused";p.remainingMs=5000;p.endsAt=null;return;}
+    p.status="sold";p.soldTo=p.highestBidder;p.soldPrice=p.currentBid;
+  }else p.status="skipped";
+  p.roundState="closed";p.endsAt=null;reconcile(model);
+}
+function resetLot(p,opening){Object.assign(p,{status:"active",currentBid:opening,openingBid:opening,highestBidder:null,highestBidderUid:null,roundState:"ready",endsAt:null,remainingMs:20000,audit:"",previousBid:opening,previousBidder:null});}
 
-/* ============================= ROBLOX AVATAR RESOLUTION ============================= */
 async function fetchJSON(url, opts){
   const res = await fetch(url, opts||{});
   if(!res.ok) throw new Error("HTTP "+res.status);
@@ -390,7 +444,7 @@ async function resolveOneUserId(username){
   return null;
 }
 async function resolveAvatarsIfNeeded(){
-  // External avatar fetching is disabled in this standalone portfolio demo.
+  // External Roblox avatar fetching is not configured; initials are shown.
   return;
 }
 
@@ -428,17 +482,17 @@ function heroMarkup(role){
   if(!p){
     const done = pendingPlayers().length===0;
     return '<div class="empty-hero"><div class="sigil"></div><h2>'+(done?"The ledger is closed":"No lot selected")+'</h2>'+
-      '<p>'+(done?"All 48 fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
+      '<p>'+(done?"All 42 fighters have gone under the hammer.":"Choose a lot from the queue to begin.")+'</p></div>';
   }
   const lotNum = p.id+1;
   let html = '<div class="lot-label">Lot '+lotNum+' of '+USERNAMES.length+'</div>';
   html += avatarFrame(p, !!p.highestBidder);
-  html += '<h2 class="hero-name">'+esc(p.username)+'</h2>';
+  html += '<h2 class="hero-name">'+esc(p.username)+'</h2>'+clockMarkup(p);
   html += '<div class="bid-figures">'+
     '<div class="item"><div class="label">Current bid</div><div class="value">'+fmt(p.currentBid)+'</div></div>'+
     '<div class="item"><div class="label">Highest bidder</div><div class="value bidder">'+(p.highestBidder?esc(p.highestBidder):"— none yet —")+'</div></div>'+
     '</div>';
-  return html;
+  return html+historyMarkup(p);
 }
 
 function queueMarkup(clickable){
@@ -469,11 +523,7 @@ function soldStripMarkup(){
   }).join("")+'</div>';
 }
 
-function captainNames(){
-  return Array.isArray(state.meta.captains)
-    ? state.meta.captains.slice(0, CAPTAIN_LIMIT)
-    : [];
-}
+function captainNames(){return Object.keys(state.bidders).slice(0,CAPTAIN_LIMIT);}
 
 function rostersMarkup(){
   const captains = captainNames();
@@ -512,6 +562,7 @@ function render(){
 }
 
 function rerenderDynamic(){
+  const requestsEl=document.getElementById("requestsBox");if(requestsEl)requestsEl.innerHTML=requestsMarkup();
   if(state.screen === "admin-dashboard"){
     const heroEl = document.getElementById("heroBox"); if(heroEl) heroEl.innerHTML = heroMarkup("admin");
     const qEl = document.getElementById("queueBox"); if(qEl) qEl.innerHTML = queueBoxMarkup();
@@ -559,65 +610,31 @@ function refreshQuickBidButtons(){
   const steps = [100,250,500,1000];
   box.innerHTML = steps.map(s=>{
     const amt = p.currentBid + s;
-    const disabled = amt > budget;
+    const disabled = !connected || !clockReady || amt > budget || p.roundState!=="running" || serverNow()>=p.endsAt || p.highestBidder===state.bidderName;
     return '<button data-action="bidder-quick-bid" data-amt="'+amt+'" '+(disabled?"disabled":"")+'>+'+s+' → '+fmt(amt)+'</button>';
   }).join("");
 }
 
 function roleSelectScreen(){
-  const banner = '<div class="setup-banner" style="border-color:var(--verdigris);color:var(--bone);background:rgba(92,139,122,.1)">Portfolio demo — data stays in this browser. Open another browser to see an independent session; live multiplayer is not enabled.</div>';
-  return '<div class="gate"><div class="gate-card panel">'+
-    '<div class="sigil"></div>'+
-    '<h1>The Deepwoken Draft</h1>'+
-    '<p class="tag">6 captain seats. One ledger. Spend your notes wisely.</p>'+
-    banner+
-    '<div class="stack">'+
-      '<button class="btn btn-gold" data-action="goto-admin-login">Open demo host dashboard</button>'+
-      '<button class="btn" data-action="goto-bidder-join">Join demo auction</button>'+
-    '</div>'+
-    '<p class="hint" style="margin-top:22px;">Portfolio demonstration. No real money or shared auction data.</p>'+
-    '</div></div>';
+ return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Build your winning roster.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>Live Firebase bids</span></div><div class="setup-banner">'+esc(setupError||(!currentUser?"Sign in to join the live draft.":connected?"Connected to the shared draft.":"Connecting…"))+'</div><div class="stack">'+(!currentUser?'<button class="btn btn-gold" data-action="sign-in">Continue with Google</button>':'<button class="btn btn-gold" data-action="goto-bidder-join">Join as captain</button><button class="btn" data-action="goto-admin-login">Host access</button><button class="btn" data-action="sign-out">Sign out</button>')+'</div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
 }
-
 function adminLoginScreen(){
-  return '<div class="gate"><div class="gate-card panel">'+
-    '<div class="sigil"></div>'+
-    '<h1>Host access</h1>'+
-    '<p class="tag">This is a local portfolio demo. Host controls are available without a password.</p>'+
-    
-    '<div id="loginError" class="error-msg"></div>'+
-    '<button class="btn btn-gold" data-action="submit-admin-login">Open dashboard</button>'+
-    '<a class="back-link" data-action="goto-role-select" href="#">← back</a>'+
-    '</div></div>';
+ return '<div class="gate"><div class="gate-card panel"><h1>Host access</h1><p class="tag">'+(isHost?"Your account has host permission.":"Ask the project owner to grant this account host access in Firebase.")+'</p><p class="hint">Your account UID</p><input readonly aria-label="Your account UID" value="'+esc(currentUser?.uid||"")+'" /><button class="btn btn-gold" data-action="submit-admin-login" '+(!isHost?'disabled':'')+'>'+(state.loaded?'Open dashboard':'Initialise draft')+'</button><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
 }
-
 function bidderJoinScreen(){
-  const captains = captainNames();
-  const full = captains.length >= CAPTAIN_LIMIT;
-
-  return '<div class="gate"><div class="gate-card panel">'+
-    '<div class="sigil"></div>'+
-    '<h1>Join the draft</h1>'+
-    '<p class="tag">'+(full
-      ? 'All 6 captain seats are filled. No more auctioneers can join.'
-      : 'Sign up as an auctioneer. The first 6 people to join become captains and get '+fmt(STARTING_BUDGET)+' notes.')+'</p>'+
-    (!full
-      ? '<div class="field"><label for="auctioneerNameInput">Auctioneer name</label><input id="auctioneerNameInput" maxlength="40" autocomplete="off" placeholder="Enter your name" /></div>'+
-        '<div id="joinError" class="error-msg"></div>'+
-        '<button class="btn btn-gold" data-action="signup-auctioneer">Sign up as auctioneer</button>'
-      : '')+
-    (captains.length
-      ? '<div style="margin-top:24px;text-align:left"><div class="col-heading">Captain seats ('+captains.length+'/6)</div>'+
-        '<div class="stack">'+captains.map(cap=>
-          '<button class="btn btn-sm" data-action="pick-captain" data-name="'+esc(cap)+'">'+esc(cap)+'</button>'
-        ).join("")+'</div></div>'
-      : '')+
-    '<a class="back-link" data-action="goto-role-select" href="#">← back</a>'+
-    '</div></div>';
+ const mine=Object.entries(state.bidders).find(([name,b])=>b.uid===currentUser?.uid);
+ const requested=requests[currentUser?.uid];
+ return '<div class="gate"><div class="gate-card panel"><h1>Join the draft</h1><p class="tag">'+(mine?"Your captain seat is ready.":requested?"Your seat request is waiting for the host.":"Request a captain seat. The host approves up to six captains.")+'</p>'+(!mine&&!requested?'<div class="field"><label for="auctioneerNameInput">Captain name</label><input id="auctioneerNameInput" maxlength="30" autocomplete="off" placeholder="Your captain name" /></div><button class="btn btn-gold" data-action="signup-auctioneer">Request captain seat</button>':'')+(mine?'<button class="btn btn-gold" data-action="enter-draft">Enter auction</button>':'')+'<p class="hint">'+captainNames().length+'/6 seats filled · 30,000 notes each</p><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
 }
-
+function requestsMarkup(){
+ if(!isHost)return '';
+ const approved=new Set(Object.values(state.bidders).map(b=>b.uid));
+ const pending=Object.entries(requests).filter(([uid])=>!approved.has(uid));
+ return '<div class="col-heading">Seat requests</div>'+ (pending.map(([uid,r])=>'<div class="bidder-row"><span>'+esc(r.name)+'</span><button class="btn btn-sm" data-action="approve-captain" data-uid="'+esc(uid)+'">Approve</button></div>').join('')||'<p class="hint">No pending requests.</p>');
+}
 function adminDashboardScreen(){
   return topBar("admin") +
+    '<div class="setup-banner" style="margin:14px auto;max-width:1300px">Keep this host dashboard open: bids close at the shared deadline; this dashboard records sales automatically.</div>' +
     '<main class="layout">'+
       '<aside class="queue-col"><div class="col-heading" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'+
         '<span>Lots — '+USERNAMES.length+' total</span>'+
@@ -631,21 +648,16 @@ function adminDashboardScreen(){
         '</div>'+
         '<div class="sold-strip-wrap"><div class="col-heading">Sold</div><div id="soldBox">'+soldStripMarkup()+'</div></div>'+
       '</section>'+
-      '<aside class="side-col"><div class="col-heading">Auctioneers</div><div id="biddersBox">'+biddersListMarkup(null)+'</div></aside>'+
+      '<aside class="side-col"><div id="requestsBox">'+requestsMarkup()+'</div><div class="col-heading">Auctioneers</div><div id="biddersBox">'+biddersListMarkup(null)+'</div></aside>'+
     '</main>'+
     '<div class="rosters-wrap"><div class="col-heading">Captains&#8217; picks</div><div id="rostersBox">'+rostersMarkup()+'</div></div>';
 }
 
 function adminPanelMarkup(){
-  return '<div class="admin-panel panel">'+
+  return '<div class="admin-actions" style="margin-bottom:18px"><button class="btn btn-gold" data-action="round-start">Start / resume</button><button class="btn" data-action="round-pause">Pause</button><button class="btn" data-action="round-undo">Undo last bid</button><button class="btn" data-action="round-restart">Restart round</button><button class="btn" data-action="export-results">Export results</button></div>'+ '<div class="admin-panel panel">'+
     '<div class="row">'+
-      '<input id="startingBidInput" type="number" min="0" placeholder="Opening bid for next lot" value="'+state.meta.startingBid+'" />'+
+      '<input id="startingBidInput" type="number" min="0" placeholder="Opening bid for next lot" aria-label="Opening bid for next lot" value="'+state.meta.startingBid+'" />'+
       '<button class="btn btn-sm" data-action="admin-set-starting-bid">Set</button>'+
-    '</div>'+
-    '<div class="row">'+
-      '<input id="customBidInput" type="number" min="0" placeholder="Custom bid amount" />'+
-      '<select id="assignBidderSelect"></select>'+
-      '<button class="btn btn-sm" data-action="admin-set-bid">Record bid</button>'+
     '</div>'+
     '<div class="admin-actions">'+
       '<button class="btn btn-sold" data-action="admin-mark-sold">Mark sold</button>'+
@@ -653,7 +665,7 @@ function adminPanelMarkup(){
       '<button class="btn btn-next" data-action="admin-next-lot">Next lot</button>'+
     '</div>'+
     '<div class="admin-actions">'+
-      '<button class="btn btn-danger btn-sm" data-action="admin-resolve-avatars">Re-fetch avatars</button>'+
+      '<button class="btn btn-sm" data-action="toggle-registration">Open / close signups</button>'+
       '<button class="btn btn-danger btn-sm" data-action="admin-reset-auction">Reset entire draft</button>'+
     '</div>'+
   '</div>';
@@ -667,14 +679,14 @@ function bidderViewScreen(){
         '<div class="divider-flourish"><span class="ln"></span><span class="dot"></span><span class="ln"></span></div>'+
         '<div class="controls-block">'+
           '<div class="quick-bids" id="quickBidsBox"></div>'+
-          '<div class="custom-bid-row"><input id="customBidderAmt" type="number" placeholder="Custom amount" />'+
+          '<div class="custom-bid-row"><input id="customBidderAmt" type="number" placeholder="Custom amount" aria-label="Custom bid amount" />'+
             '<button class="btn btn-gold btn-sm" data-action="bidder-custom-bid">Place bid</button></div>'+
-          '<p class="hint">Bids are final once the host marks a lot sold.</p>'+
+          '<p class="hint">Bidding closes when the timer reaches zero. The host can undo mistakes during the round.</p>'+
         '</div>'+
         '</div>'+
         '<div class="sold-strip-wrap"><div class="col-heading">Sold</div><p class="hint" id="remainingCount" style="margin:-6px 0 12px;">'+remainingCountText()+'</p><div id="soldBox">'+soldStripMarkup()+'</div></div>'+
       '</section>'+
-      '<aside class="side-col"><div class="col-heading">Auctioneers</div><div id="biddersBox">'+biddersListMarkup(state.bidderName)+'</div></aside>'+
+      '<aside class="side-col"><div id="requestsBox">'+requestsMarkup()+'</div><div class="col-heading">Auctioneers</div><div id="biddersBox">'+biddersListMarkup(state.bidderName)+'</div></aside>'+
     '</main>'+
     '<div class="rosters-wrap"><div class="col-heading">Captains&#8217; picks</div><div id="rostersBox">'+rostersMarkup()+'</div></div>';
 }
@@ -688,236 +700,179 @@ function topBar(role){
     '</div></header>';
 }
 
-/* ============================= EVENT DELEGATION ============================= */
-let delegated = false;
+/* Shared database mutations: bids transact one lot; hosts transact the whole ledger. */
+let delegated=false,busy=false;
 function attachOnce(){
-  if(delegated) return;
-  delegated = true;
-  document.addEventListener("click", async (e)=>{
-    const el = e.target.closest("[data-action]");
-    if(!el) return;
-    e.preventDefault();
-    const action = el.getAttribute("data-action");
-
-    if(action === "goto-role-select"){ state.screen="role-select"; state.bidderName=null; render(); }
-    else if(action === "goto-admin-login"){ state.screen="admin-login"; render();  }
-    else if(action === "goto-bidder-join"){ state.screen="bidder-join"; render(); setTimeout(()=>{const i=document.getElementById("auctioneerNameInput"); if(i) i.focus();},0); }
-
-    else if(action === "submit-admin-login"){
-      
-      await refreshAll(); state.screen="admin-dashboard"; render();
-    }
-
-    else if(action === "signup-auctioneer"){
-      const input = document.getElementById("auctioneerNameInput");
-      const error = document.getElementById("joinError");
-      const name = (input && input.value || "").trim();
-
-      if(!name){
-        if(error) error.textContent = "Enter your auctioneer name.";
-        return;
-      }
-
-      await refreshAll();
-
-      // Re-read the latest captain list before accepting the signup.
-      const latestMeta = await sGet("dw_meta") || defaultMeta();
-      const captains = Array.isArray(latestMeta.captains)
-        ? latestMeta.captains.slice(0, CAPTAIN_LIMIT)
-        : [];
-
-      if(captains.length >= CAPTAIN_LIMIT){
-        showToast("All 6 captain seats are filled.");
-        render();
-        return;
-      }
-
-      const existing = Object.keys(state.bidders || {});
-      if(existing.some(n => n.toLowerCase() === name.toLowerCase())){
-        if(error) error.textContent = "That auctioneer has already signed up.";
-        return;
-      }
-
-      const newCaptains = captains.concat(name).slice(0, CAPTAIN_LIMIT);
-      const meta = Object.assign({}, latestMeta, {captains:newCaptains});
-      const bidders = Object.assign({}, state.bidders, {
-        [name]: { budget: STARTING_BUDGET, won: [] }
-      });
-
-      await sSet("dw_meta", meta);
-      await sSet("dw_bidders", bidders);
-
-      state.meta = meta;
-      state.bidders = bidders;
-      state.bidderName = name;
-      state.screen = "bidder-view";
-      render();
-    }
-
-    else if(action === "pick-captain"){
-      const name = el.getAttribute("data-name");
-      await refreshAll();
-      const captains = captainNames();
-
-      if(!captains.some(c => c.toLowerCase() === name.toLowerCase())){
-        showToast("That captain seat is no longer available.");
-        render();
-        return;
-      }
-
-      const bidders = Object.assign({}, state.bidders);
-      if(!bidders[name]) bidders[name] = { budget: STARTING_BUDGET, won: [] };
-      await sSet("dw_bidders", bidders);
-      state.bidders = bidders;
-      state.bidderName = name;
-      state.screen = "bidder-view";
-      render();
-    }
-
-    else if(action === "admin-select-lot"){
-      const id = Number(el.getAttribute("data-id"));
-      await refreshAll();
-      const players = state.players.map(p=>{
-        if(p.status==="active") return Object.assign({}, p, {status:"pending"});
-        if(p.id===id && p.status==="pending") return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null});
-        return p;
-      });
-      await sSet("dw_players", players);
-      state.players = players;
-      rerenderDynamic();
-    }
-
-    else if(action === "admin-set-starting-bid"){
-      const v = Number((document.getElementById("startingBidInput")||{}).value || 0);
-      const meta = Object.assign({}, state.meta, {startingBid: v});
-      await sSet("dw_meta", meta);
-      state.meta = meta;
-      showToast("Opening bid set to "+fmt(v)+" notes");
-    }
-
-    else if(action === "admin-set-bid"){
-      await refreshAll();
-      const p = activePlayer();
-      if(!p){ showToast("No active lot."); return; }
-      const amt = Number((document.getElementById("customBidInput")||{}).value || 0);
-      const who = (document.getElementById("assignBidderSelect")||{}).value || "";
-      if(!amt || amt<=0){ showToast("Enter a bid amount."); return; }
-      const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {currentBid: amt, highestBidder: who || pl.highestBidder}) : pl);
-      await sSet("dw_players", players);
-      state.players = players;
-      rerenderDynamic();
-      showToast("Bid recorded: "+fmt(amt)+" notes"+(who?" — "+who:""));
-    }
-
-    else if(action === "admin-mark-sold"){
-      await refreshAll();
-      const p = activePlayer();
-      if(!p){ showToast("No active lot."); return; }
-      if(!p.highestBidder){ if(!confirm("No highest bidder set — mark this lot sold with no buyer recorded?")){ return; } }
-      const players = state.players.slice();
-      const bidders = Object.assign({}, state.bidders);
-      const idx = players.findIndex(pl=>pl.id===p.id);
-      players[idx] = Object.assign({}, p, {status:"sold", soldPrice:p.currentBid, soldTo:p.highestBidder});
-      if(p.highestBidder){
-        const b = bidders[p.highestBidder] || {budget:STARTING_BUDGET, won:[]};
-        bidders[p.highestBidder] = Object.assign({}, b, {budget: b.budget - p.currentBid, won: (b.won||[]).concat([p.id])});
-      }
-      await sSet("dw_players", players);
-      await sSet("dw_bidders", bidders);
-      state.players = players; state.bidders = bidders;
-      rerenderDynamic();
-      showToast(esc(p.username)+" sold for "+fmt(p.currentBid)+" notes");
-    }
-
-    else if(action === "admin-skip-lot"){
-      await refreshAll();
-      const p = activePlayer();
-      if(!p) return;
-      const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {status:"skipped"}) : pl);
-      await sSet("dw_players", players);
-      state.players = players;
-      rerenderDynamic();
-    }
-
-    else if(action === "admin-next-lot"){
-      await refreshAll();
-      const next = state.players.find(p=>p.status==="pending");
-      const players = state.players.map(p=>{
-        if(p.status==="active") return p; // leave as-is; host should mark sold/skip first
-        if(next && p.id===next.id) return Object.assign({}, p, {status:"active", currentBid: state.meta.startingBid, highestBidder:null});
-        return p;
-      });
-      await sSet("dw_players", players);
-      state.players = players;
-      rerenderDynamic();
-      if(!next) showToast("No lots remaining.");
-    }
-
-    else if(action === "admin-toggle-entrants"){
-      state.hideEntrants = !state.hideEntrants;
-      try{ localStorage.setItem("dw_hideEntrants", state.hideEntrants ? "1" : "0"); }catch(err){}
-      const qEl = document.getElementById("queueBox"); if(qEl) qEl.innerHTML = queueBoxMarkup();
-      const btn = document.getElementById("entrantsToggleBtn"); if(btn) btn.textContent = state.hideEntrants ? "Show" : "Hide";
-    }
-
-    else if(action === "admin-resolve-avatars"){
-      const meta = Object.assign({}, state.meta, {avatarsResolved:false});
-      await sSet("dw_meta", meta);
-      state.meta = meta;
-      showToast("Re-fetching Roblox avatars…");
-      resolveAvatarsIfNeeded();
-    }
-
-    else if(action === "admin-reset-auction"){
-      if(!confirm("Reset the entire draft? All bids, sales, and auctioneer budgets will be cleared. This cannot be undone.")) return;
-      if(!confirm("Really sure? This wipes everything back to lot 1.")) return;
-      const players = defaultPlayers();
-      const meta = defaultMeta();
-      await sSet("dw_players", players);
-      await sSet("dw_meta", meta);
-      await sSet("dw_bidders", {});
-      state.players = players; state.meta = meta; state.bidders = {};
-      rerenderDynamic();
-      resolveAvatarsIfNeeded();
-      showToast("Draft reset.");
-    }
-
-    else if(action === "bidder-quick-bid"){
-      const amt = Number(el.getAttribute("data-amt"));
-      await placeBid(amt);
-    }
-    else if(action === "bidder-custom-bid"){
-      const amt = Number((document.getElementById("customBidderAmt")||{}).value || 0);
-      if(!amt){ showToast("Enter an amount to bid."); return; }
-      await placeBid(amt);
-    }
-  });
+ if(delegated)return;delegated=true;
+ document.addEventListener('click',async e=>{
+  const el=e.target.closest('[data-action]');if(!el||el.disabled)return;e.preventDefault();
+  const action=el.dataset.action;
+  if(busy)return;busy=true;
+  try{await handleAction(action,el);}catch(err){showToast(friendlyError(err));console.error(err);}finally{busy=false;}
+ });
 }
-
-async function placeBid(amt){
-  await refreshAll();
-  const p = activePlayer();
-  if(!p){ showToast("No active lot to bid on."); return; }
-  if(amt <= p.currentBid){ showToast("Your bid must beat the current bid of "+fmt(p.currentBid)+"."); return; }
-  const budget = myBudget();
-  if(amt > budget){ showToast("You only have "+fmt(budget)+" notes remaining."); return; }
-  const players = state.players.map(pl => pl.id===p.id ? Object.assign({}, pl, {currentBid:amt, highestBidder: state.bidderName}) : pl);
-  await sSet("dw_players", players);
-  state.players = players;
-  rerenderDynamic();
-  showToast("Bid placed: "+fmt(amt)+" notes");
+function friendlyError(err){
+ const code=String(err.code||err.message||'');
+ if(code.includes('unauthorized-domain'))return 'Add this website domain to Firebase Authentication → Settings → Authorized domains.';
+ if(code.includes('operation-not-allowed'))return 'Enable Google sign-in in Firebase Authentication first.';
+ if(code.toLowerCase().includes('permission_denied')||code.includes('permission-denied'))return 'Firebase rejected this action. Check the new database rules and your host permission.';
+ if(code.includes('popup-blocked'))return 'Allow the Google sign-in popup, then try again.';
+ if(code.includes('popup-closed'))return 'Sign-in cancelled.';
+ return err.message||'Could not complete that action.';
 }
-
-/* ============================= INIT & LIVE SYNC ============================= */
-async function init(){
-  if(!FIREBASE_CONFIGURED){
-    render(); // shows the setup banner on the role-select screen
-    return;
+async function handleAction(action,el){
+ if(action==='sign-in'){await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());return;}
+ if(action==='sign-out'){await auth.signOut();return;}
+ if(action==='goto-role-select'){state.screen='role-select';render();return;}
+ if(action==='goto-admin-login'){state.screen='admin-login';render();return;}
+ if(action==='goto-bidder-join'){state.screen='bidder-join';render();return;}
+ if(action==='submit-admin-login'){
+  hostRequired();
+  const initial=encode(initialiseModel());
+  const result=await sessionRef.transaction(raw=>raw?undefined:initial,undefined,false);
+  if(result.committed)applyRaw(result.snapshot.val());else await refreshAll();
+  state.screen='admin-dashboard';render();return;
+ }
+ if(action==='signup-auctioneer'){
+  if(!currentUser||!connected)throw Error('Sign in and wait for the connection.');
+  if(!state.loaded||!state.meta.registrationOpen)throw Error('The host has not opened captain signups yet.');
+  const name=document.getElementById('auctioneerNameInput').value.trim();
+  if(!/^[A-Za-z0-9 _-]{1,30}$/.test(name)||['__proto__','constructor','prototype'].includes(name))throw Error('Use 1–30 letters, numbers, spaces, underscores or hyphens.');
+  await db.ref(ROOT+'/requests/'+currentUser.uid).set({name,createdAt:firebase.database.ServerValue.TIMESTAMP});
+  state.screen='bidder-join';render();return;
+ }
+ if(action==='enter-draft'){
+  const mine=Object.entries(state.bidders).find(([n,b])=>b.uid===currentUser?.uid);
+  if(!mine)throw Error('The host has not approved your seat yet.');
+  state.bidderName=mine[0];state.screen='bidder-view';render();return;
+ }
+ if(action==='approve-captain'){
+  const uid=el.dataset.uid,request=requests[uid];if(!request)throw Error('Request no longer exists.');
+  await hostMutate(model=>{
+   if(Object.values(model.bidders).some(b=>b.uid===uid))return false;
+   if(Object.keys(model.bidders).length>=6)throw Error('All six captain seats are filled.');
+   if(Object.keys(model.bidders).some(n=>n.toLowerCase()===request.name.toLowerCase()))throw Error('That captain name is already taken.');
+   model.bidders[request.name]={name:request.name,uid,budget:STARTING_BUDGET};
+  });showToast('Captain approved.');return;
+ }
+ if(action==='export-results'){
+  hostRequired();const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),players:state.players,captains:state.bidders},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='deepwoken-results.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+ }
+ if(action==='admin-toggle-entrants'){state.hideEntrants=!state.hideEntrants;rerenderDynamic();const btn=document.getElementById('entrantsToggleBtn');if(btn)btn.textContent=state.hideEntrants?'Show':'Hide';return;}
+ if(action==='bidder-quick-bid'){await submitBid(Number(el.dataset.amt));return;}
+ if(action==='bidder-custom-bid'){await submitBid(Number(document.getElementById('customBidderAmt').value));return;}
+ if(action==='admin-set-bid'){throw Error('Captains submit their own bids from their signed-in accounts.');}
+ const opening=Number(document.getElementById('startingBidInput')?.value||0);
+ if(action==='admin-reset-auction'&&!confirm('Reset this draft? Captains keep their seats; all picks and bids are cleared. Export results first.'))return;
+ if(action==='round-restart'&&!confirm('Clear this lot’s bids and reset its clock to 20 seconds?'))return;
+ if(action==='admin-mark-sold'&&!confirm('Close the current round and sell to the highest bidder now?'))return;
+ await hostMutate((model,now)=>{
+  let p=activeIn(model);
+  if(p?.roundState==='running'&&now>=p.endsAt){settle(model,p);p=null;}
+  if(action==='admin-set-starting-bid'){
+   if(!Number.isSafeInteger(opening)||opening<100||opening>30000)throw Error('Opening bid must be 100–30,000 whole notes.');
+   model.meta.startingBid=opening;return;
   }
-  await ensureInit();
-  render();
-  resolveAvatarsIfNeeded();
-  // No cross-device listeners: this is a local-only demonstration.
+  if(action==='toggle-registration'){model.meta.registrationOpen=!model.meta.registrationOpen;return;}
+  if(action==='admin-reset-auction'){
+   model.players=initialiseModel().players;model.meta.startingBid=100;reconcile(model);return;
+  }
+  if(action==='admin-select-lot'||action==='admin-next-lot'){
+   if(p)throw Error('Finish or skip the current lot first.');
+   const next=action==='admin-next-lot'?(model.players.find(p=>p.status==='pending')||model.players.find(p=>p.status==='skipped')):model.players.find(p=>p.id===Number(el.dataset.id)&&p.status==='pending');
+   if(!next)throw Error('No available lots.');resetLot(next,model.meta.startingBid);return;
+  }
+  if(!p)throw Error('Choose the next lot first.');
+  if(action==='round-start'){
+   if(p.roundState==='running')return false;
+   p.roundState='running';p.endsAt=now+(p.remainingMs||20000);p.remainingMs=null;
+  }else if(action==='round-pause'){
+   if(p.roundState!=='running')return false;
+   p.remainingMs=Math.max(1,p.endsAt-now);p.roundState='paused';p.endsAt=null;
+  }else if(action==='round-restart')resetLot(p,p.openingBid||model.meta.startingBid);
+  else if(action==='round-undo'){
+   const lines=(p.audit||'').split('\n').filter(Boolean);if(!lines.length)throw Error('No bids to undo.');
+   lines.pop();p.audit=lines.length?lines.join('\n')+'\n':'';
+   const last=lines.at(-1)?.split('|');
+   p.currentBid=last?Number(last[0]):p.openingBid;
+   p.highestBidderUid=last?last[1]:null;
+   p.highestBidder=last?Object.keys(model.bidders).find(n=>model.bidders[n].uid===last[1]):null;
+   const prev=lines.at(-2)?.split('|');p.previousBid=prev?Number(prev[0]):p.openingBid;
+   p.previousBidder=prev?Object.keys(model.bidders).find(n=>model.bidders[n].uid===prev[1]):null;
+   if(p.roundState==='running')p.endsAt=Math.max(p.endsAt,now+5000);
+  }else if(action==='admin-mark-sold'){
+   if(!p.highestBidder)throw Error('No winning bid. Skip the lot instead.');settle(model,p);
+  }else if(action==='admin-skip-lot'){p.status='skipped';p.roundState='closed';p.endsAt=null;}
+ });
+}
+async function submitBid(amt){
+ if(!currentUser||!connected||!clockReady)throw Error('Wait for the live connection.');
+ const mine=Object.entries(state.bidders).find(([n,b])=>b.uid===currentUser.uid);
+ if(!mine)throw Error('A host-approved captain seat is required.');
+ const p=activePlayer();if(!p)throw Error('No active lot.');
+ let reason='The round changed. Try again.';
+ const result=await sessionRef.child('players/'+p.id).transaction(lot=>{
+  const now=serverNow();
+  if(!lot||lot.status!=='active'||lot.roundState!=='running'||now>=lot.endsAt){reason='Bidding is closed or paused.';return;}
+  if(lot.highestBidderUid===currentUser.uid){reason='You already hold the highest bid.';return;}
+  const min=lot.highestBidder?lot.currentBid+100:Math.max(100,lot.currentBid);
+  if(!Number.isSafeInteger(amt)||amt<min){reason='Minimum bid: '+fmt(min)+' whole notes.';return;}
+  if(amt>mine[1].budget){reason='You only have '+fmt(mine[1].budget)+' notes left.';return;}
+  const end=Math.max(lot.endsAt,now+5000);
+  return {...lot,currentBid:amt,highestBidder:mine[0],highestBidderUid:currentUser.uid,endsAt:end,previousBid:lot.currentBid,previousBidder:lot.highestBidder||null,audit:(lot.audit||'')+amt+'|'+currentUser.uid+'|'+end+'\n'};
+ },undefined,false);
+ if(!result.committed)throw Error(reason);
+ showToast('Bid accepted: '+fmt(amt)+' notes');
+}
+function clockMarkup(p){
+ return '<div class="round-clock" id="roundClock"><div class="clock-head"><span id="clockState">'+esc(p.roundState||'ready')+'</span><strong id="clockSeconds">20s</strong></div><div class="clock-track"><div class="clock-fill" id="clockFill"></div></div><small>20-second rounds · late bids restore 5 seconds · minimum raise 100 notes</small></div>';
+}
+function historyMarkup(p){
+ return '<div class="bid-history"><div class="col-heading">Bid history</div>'+((p.history||[]).slice(-6).reverse().map(b=>'<div class="history-row"><span>'+esc(b.who)+'</span><b>'+fmt(b.amount)+' notes</b></div>').join('')||'<p class="hint">Waiting for the first bid.</p>')+'</div>';
+}
+let settling=false;
+setInterval(async()=>{
+ const p=activePlayer();if(!p)return;
+ const now=serverNow(),seconds=p.roundState==='running'?Math.max(0,Math.ceil((p.endsAt-now)/1000)):Math.ceil((p.remainingMs||20000)/1000);
+ const sec=document.getElementById('clockSeconds'),fill=document.getElementById('clockFill'),label=document.getElementById('clockState'),clock=document.getElementById('roundClock');
+ if(sec)sec.textContent=seconds+'s';if(fill)fill.style.width=Math.min(100,seconds/20*100)+'%';
+ if(label)label.textContent=!connected?'Reconnecting…':p.roundState==='running'&&now>=p.endsAt?'Closed · awaiting sale':p.roundState||'Ready';
+ if(clock)clock.classList.toggle('urgent',p.roundState==='running'&&seconds<=5);refreshQuickBidButtons();
+ if(isHost&&connected&&clockReady&&!settling&&p.roundState==='running'&&now>=p.endsAt){
+  settling=true;try{await hostMutate((m,t)=>{const lot=activeIn(m);if(lot?.roundState==='running'&&t>=lot.endsAt)settle(m,lot);else return false;});}
+  catch(err){showToast(friendlyError(err));}finally{settling=false;}
+ }
+},200);
+async function init(){
+ render();
+ try{
+  if(typeof firebase==='undefined')throw Error('Firebase could not load. Check your internet connection.');
+  firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.database();sessionRef=db.ref(ROOT+'/session');
+  db.ref('.info/serverTimeOffset').on('value',snap=>{offset=Number(snap.val()||0);clockReady=true;});
+  db.ref('.info/connected').on('value',snap=>{connected=!!snap.val();if(state.screen==='role-select')render();refreshQuickBidButtons();});
+  auth.onAuthStateChanged(async user=>{
+   if(unsubSession){unsubSession();unsubSession=null;}
+   currentUser=user;isHost=false;requests={};state.players=[];state.bidders={};state.meta={};state.loaded=false;state.bidderName=null;state.screen='role-select';setupError='';
+   if(!user){render();return;}
+   try{
+    isHost=(await db.ref('auctionHosts/'+user.uid).get()).val()===true;
+    const sessionHandler=snap=>{
+     applyRaw(snap.val());
+     // History names resolve after the bidder directory has been applied.
+     state.players=state.players.map(p=>({...p,history:historyFromAudit(p)}));
+     if(state.screen==='role-select'||state.screen==='bidder-join'||state.screen==='admin-login')render();else rerenderDynamic();
+    };
+    const errorHandler=err=>{setupError=friendlyError(err);render();};
+    sessionRef.on('value',sessionHandler,errorHandler);
+    const requestRef=isHost?db.ref(ROOT+'/requests'):db.ref(ROOT+'/requests/'+user.uid);
+    const requestHandler=snap=>{requests=isHost?(snap.val()||{}):{[user.uid]:snap.val()};if(!isHost&&!snap.val())requests={};if(state.screen==='bidder-join')render();else rerenderDynamic();};
+    requestRef.on('value',requestHandler,errorHandler);
+    unsubSession=()=>{sessionRef.off('value',sessionHandler);requestRef.off('value',requestHandler);};
+   }catch(err){setupError=friendlyError(err);}
+   render();
+  });
+ }catch(err){setupError=friendlyError(err);render();}
 }
 init();
 
