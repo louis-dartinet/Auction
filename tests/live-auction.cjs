@@ -20,11 +20,16 @@ const inputs={};
 const ctx={console,Date:class extends Date{static now(){return now}},document:{getElementById:k=>inputs[k]||null,createElement:()=>({set textContent(v){this.innerHTML=v},innerHTML:''}),addEventListener(){}},window:{},setInterval(){},setTimeout(){},clearTimeout(){},localStorage:{getItem:()=>null},confirm:()=>true};
 let script=fs.readFileSync('index.html','utf8').split('<script>')[1].split('</script>')[0];
 for(const name of ['render','rerenderDynamic','showToast'])script=script.replace('function '+name+'(', 'function '+name+'('); // declarations overridden below inside closure
-script=script.replace('init();',`render=()=>{};rerenderDynamic=()=>{};showToast=()=>{};globalThis.test={state,initialiseModel,encode,decode,applyRaw,submitBid,handleAction,hostMutate,settle,setIdentity(uid,hostFlag){currentUser={uid};isHost=hostFlag;connected=true;clockReady=true;sessionRef=__ref;}};`);
+script=script.replace('init();',`render=()=>{};rerenderDynamic=()=>{};showToast=()=>{};globalThis.test={state,initialiseModel,encode,decode,applyRaw,submitBid,handleAction,hostMutate,settle,parseRobloxId,installRobloxUser,setIdentity(uid,hostFlag){currentUser={uid};isHost=hostFlag;connected=true;clockReady=true;sessionRef=__ref;}};`);
 ctx.__ref=ref();vm.runInNewContext(script,ctx);const t=ctx.test;
 const sync=()=>t.applyRaw(raw),active=()=>Object.values(raw.players).find(p=>p.status==='active');
 async function identity(uid){signedUid=uid;t.setIdentity(uid,uid===host);sync();}
 (async()=>{
+assert.equal(t.parseRobloxId('12345'),12345);assert.equal(t.parseRobloxId('https://www.roblox.com/users/12345/profile'),12345);
+for(const bad of ['0','-3','1.5','https://evil.test/12345','abc'])assert.throws(()=>t.parseRobloxId(bad));
+const model=t.initialiseModel();t.installRobloxUser(model,{id:777,name:'NewFighter'},'https://tr.rbxcdn.com/avatar.png','');assert.equal(model.players.length,43);assert.equal(model.players.at(-1).robloxId,777);
+assert.throws(()=>t.installRobloxUser(model,{id:777,name:'NewFighter'},null,'0'),/already/);
+model.players[0].audit='bid';assert.throws(()=>t.installRobloxUser(model,{id:888,name:'Other'},null,'0'),/unbid/);
 raw=t.encode(t.initialiseModel());raw.bidders={A:{name:'Alice',budget:30000},B:{name:'Bob',budget:30000}};await identity(host);
 await t.handleAction('round-start',{});assert.equal(active().endsAt,120000);
 await identity('A');await t.submitBid(500);assert.equal(active().currentBid,500);
