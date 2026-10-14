@@ -281,6 +281,7 @@ h1,h2,.hero-name{font-family:var(--font-display);font-weight:500;letter-spacing:
 
 .queue-avatar{width:30px;height:30px;object-fit:cover;border:1px solid #879478;flex-shrink:0;}#robloxTarget{min-width:0;flex:1;}#robloxIdInput{width:100%;}.gate-card input[readonly]{width:100%;font-family:monospace;margin:10px 0;}.gate-card .btn-sm{margin-bottom:12px;}
 .manager-tools{margin:16px 0 24px;border:1px solid #a1aa91;padding:14px;text-align:left;}.manager-tools>summary{cursor:pointer;font-weight:600;padding:4px;}.manager-list,.import-list{max-height:320px;overflow:auto;margin:12px 0;}.manager-row{display:flex;align-items:center;gap:9px;border-bottom:1px solid #a6af9555;padding:9px 0;}.manager-name{flex:1;min-width:0;overflow-wrap:anywhere;}.manager-row small{display:block;color:#5e6855;font-size:11px;}.manager-row .btn{width:auto;margin:0;}.manager-row input[type=checkbox]{width:18px;height:18px;flex-shrink:0;}textarea{width:100%;resize:vertical;background:#f0f0e5;color:#232b21;border:1px solid #9ba58c;padding:12px;font:13px monospace;}@media(max-width:600px){.manager-row{flex-wrap:wrap;}.manager-row .btn{font-size:11px;}.manager-tools{padding:9px;}}
+.draft-status{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;justify-content:center;}.status-pill{font-size:12px;padding:6px 10px;border:1px solid #89947a;background:#d3d5c5;color:#343f2e;}.status-pill.open{background:#345338;color:#eef3df;border-color:#67855b;}.top .draft-status{justify-content:flex-start;}.bidder-row{gap:8px;flex-wrap:wrap;}.bidder-row .btn{width:auto;margin:0;}
 </style>
 </head>
 <body>
@@ -366,6 +367,7 @@ function applyRaw(raw){
   const model=decode(raw);state.players=model.players;state.meta=model.meta;state.bidders=model.bidders;
   const mine=Object.entries(state.bidders).find(([name,b])=>b.uid===currentUser?.uid);
   if(mine)state.bidderName=mine[0];
+  else {state.bidderName=null;if(state.screen==="bidder-view")state.screen="bidder-join";}
   state.loaded=!!raw;
 }
 function historyFromAudit(p){
@@ -569,7 +571,7 @@ function biddersListMarkup(highlightName){
   if(!names.length) return '<p class="hint">No auctioneers have joined yet.</p>';
   return names.sort().map(n=>{
     const b = state.bidders[n];
-    return '<div class="bidder-row'+(n===highlightName?" me":"")+'"><span class="nm">'+esc(n)+'</span><span class="bg">'+fmt(b.budget)+'</span></div>';
+    return '<div class="bidder-row'+(n===highlightName?" me":"")+'"><span class="nm">'+esc(n)+'</span><span class="bg">'+fmt(b.budget)+'</span>'+(isHost&&state.screen==='admin-dashboard'?'<button class="btn btn-danger btn-sm" data-action="remove-captain" data-uid="'+esc(b.uid)+'">Remove</button>':'')+'</div>';
   }).join("");
 }
 
@@ -586,6 +588,9 @@ function render(){
 }
 
 function rerenderDynamic(){
+  const total=document.getElementById('queueTotal');if(total)total.textContent='Lots — '+lotTotal()+' total';
+  const status=document.getElementById('draftStatus');if(status)status.innerHTML=draftStatusMarkup();
+  const signups=document.getElementById('registrationToggle');if(signups)signups.textContent=state.meta.registrationOpen?'Close captain signups':'Open captain signups';
   updateRosterManager();
   refreshRobloxSelect();
   const requestsEl=document.getElementById("requestsBox");if(requestsEl)requestsEl.innerHTML=requestsMarkup();
@@ -615,6 +620,7 @@ function remainingCountText(){
 }
 
 function lotCountText(){
+  if(!state.players.length)return "0 fighters · import a fighter list";
   const p = activePlayer();
   return p ? ("Lot "+lotPosition(p)+" of "+lotTotal()) : (pendingPlayers().length===0 ? "Auction complete" : "Awaiting next lot");
 }
@@ -641,9 +647,40 @@ function refreshQuickBidButtons(){
   }).join("");
 }
 
+function registrationStatus(){
+ if(!state.loaded)return 'Not initialised';
+ if(!connected)return 'Reconnecting';
+ if(!state.meta.registrationOpen)return 'Closed';
+ return captainNames().length>=CAPTAIN_LIMIT?'Full':'Open';
+}
+function draftStatusMarkup(){
+ const p=activePlayer(),signups=registrationStatus();
+ const bidding=!state.loaded?'Not initialised':!connected?'Reconnecting':p?.roundState==='running'?(serverNow()>=p.endsAt?'Closed':'Live'):p?.roundState==='paused'?'Paused':p?'Ready':pendingPlayers().length?'Awaiting next lot':state.players.length?'Finished':'No fighters';
+ return '<span class="status-pill '+(signups==='Open'?'open':'')+'">Captain signups: '+signups+'</span><span class="status-pill '+(bidding==='Live'?'open':'')+'">Bidding: '+bidding+'</span>';
+}
+function removeCaptainFromModel(model,uid,now){
+ const name=Object.keys(model.bidders).find(n=>model.bidders[n].uid===uid);if(!name)throw Error('That captain has already left.');
+ delete model.bidders[name];delete model.meta.lastRosterChange;
+ for(const p of model.players){
+  if(p.status==='sold'&&p.soldTo===name){resetLot(p,model.meta.startingBid);p.status='pending';p.soldPrice=null;p.soldTo=null;}
+  if(p.status==='active'){
+   const previousWinner=p.highestBidderUid;
+   const lines=(p.audit||'').split('\n').filter(Boolean).filter(line=>line.split('|')[1]!==uid);
+   p.audit=lines.length?lines.join('\n')+'\n':'';
+   const last=lines.at(-1)?.split('|'),prev=lines.at(-2)?.split('|');
+   p.currentBid=last?Number(last[0]):p.openingBid;
+   p.highestBidderUid=last?last[1]:null;
+   p.highestBidder=last?Object.keys(model.bidders).find(n=>model.bidders[n].uid===last[1])||null:null;
+   p.previousBid=prev?Number(prev[0]):p.openingBid;
+   p.previousBidder=prev?Object.keys(model.bidders).find(n=>model.bidders[n].uid===prev[1])||null:null;
+   if(previousWinner===uid&&p.roundState==='running'){if(now>=p.endsAt){p.roundState='paused';p.remainingMs=5000;p.endsAt=null;}else p.endsAt=Math.max(p.endsAt,now+5000);}
+  }
+ }
+ reconcile(model);
+}
 function roleSelectScreen(){
  const ready=!!currentUser;
- return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Up to 12 fighters per team.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>No sign-up needed</span></div><div class="setup-banner">'+esc(setupError||(!ready?"Connecting to the draft…":connected?"Enter a captain name to join.":"Reconnecting…"))+'</div><div class="stack"><button class="btn btn-gold" data-action="goto-bidder-join" '+(!ready?'disabled':'')+'>Join as captain</button><button class="btn" data-action="goto-admin-login" '+(!ready?'disabled':'')+'>Host access</button></div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
+ return '<div class="gate"><div class="gate-card panel"><div class="sigil"></div><h1>The Deepwoken Draft</h1><p class="tag">Six captains. 30,000 notes each. Up to 12 fighters per team.</p><div class="rules-strip"><span>20s rounds</span><span>5s anti-snipe</span><span>No sign-up needed</span></div><div id="draftStatus" class="draft-status">'+draftStatusMarkup()+'</div><div class="setup-banner">'+esc(setupError||(!ready?"Connecting to the draft…":connected?"Enter a captain name to join.":"Reconnecting…"))+'</div><div class="stack"><button class="btn btn-gold" data-action="goto-bidder-join" '+(!ready?'disabled':'')+'>Join as captain</button><button class="btn" data-action="goto-admin-login" '+(!ready?'disabled':'')+'>Host access</button></div><p class="hint" style="margin-top:20px">Community draft · in-game notes only</p></div></div>';
 }
 function adminLoginScreen(){
  return '<div class="gate"><div class="gate-card panel"><h1>Host access</h1><p class="tag">'+(isHost?"This browser has host permission.":"Grant this browser ID host access in Firebase to use these controls.")+'</p><p class="hint">The host can run rounds, undo bids, manage fighters and approve captains. To enable this browser: publish the supplied rules, then add auctionHosts → your full ID → Boolean true in Firebase Database → Data.</p><p class="hint">Your host browser ID</p><input readonly aria-label="Your host browser ID" value="'+esc(currentUser?.uid||"")+'" /><button class="btn btn-sm" data-action="copy-host-id">Copy browser ID</button><button class="btn btn-gold" data-action="submit-admin-login" '+(!isHost?'disabled':'')+'>'+(state.loaded?'Open dashboard':'Initialise draft')+'</button><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
@@ -651,7 +688,8 @@ function adminLoginScreen(){
 function bidderJoinScreen(){
  const mine=Object.entries(state.bidders).find(([name,b])=>b.uid===currentUser?.uid);
  const requested=requests[currentUser?.uid];
- return '<div class="gate"><div class="gate-card panel"><h1>Join the draft</h1><p class="tag">'+(mine?"Your captain seat is ready.":requested?"Your seat request is waiting for the host.":"Request a captain seat. The host approves up to six captains.")+'</p>'+(!mine&&!requested?'<div class="field"><label for="auctioneerNameInput">Captain name</label><input id="auctioneerNameInput" maxlength="30" autocomplete="off" placeholder="Your captain name" /></div><button class="btn btn-gold" data-action="signup-auctioneer">Request captain seat</button>':'')+(mine?'<button class="btn btn-gold" data-action="enter-draft">Enter auction</button>':'')+'<p class="hint">'+captainNames().length+'/6 seats filled · 30,000 notes each</p><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
+ const canJoin=state.loaded&&connected&&state.meta.registrationOpen&&captainNames().length<CAPTAIN_LIMIT;
+ return '<div class="gate"><div class="gate-card panel"><h1>Join the draft</h1><div id="draftStatus" class="draft-status">'+draftStatusMarkup()+'</div><p class="tag">'+(mine?"Your captain seat is ready.":requested?"Your seat request is waiting for the host.":"Request a captain seat. The host approves up to six captains.")+'</p>'+(!mine&&!requested?'<div class="field"><label for="auctioneerNameInput">Captain name</label><input id="auctioneerNameInput" maxlength="30" autocomplete="off" placeholder="Your captain name" /></div><button class="btn btn-gold" data-action="signup-auctioneer" '+(!canJoin?'disabled':'')+'>Request captain seat</button>':'')+(mine?'<button class="btn btn-gold" data-action="enter-draft">Enter auction</button>':'')+'<p class="hint">'+captainNames().length+'/6 seats filled · 30,000 notes each</p><a class="back-link" data-action="goto-role-select" href="#">← back</a></div></div>';
 }
 function requestsMarkup(){
  if(!isHost)return '';
@@ -664,7 +702,7 @@ function adminDashboardScreen(){
     '<div class="setup-banner" style="margin:14px auto;max-width:1300px">Keep this host dashboard open: bids close at the shared deadline; this dashboard records sales automatically.</div>' +
     '<main class="layout">'+
       '<aside class="queue-col"><div class="col-heading" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'+
-        '<span>Lots — '+lotTotal()+' total</span><button class="btn btn-danger btn-sm" style="width:auto;padding:4px 10px;" data-action="clear-fighter-list">Clear list</button>'+
+        '<span id="queueTotal">Lots — '+lotTotal()+' total</span><button class="btn btn-danger btn-sm" style="width:auto;padding:4px 10px;" data-action="clear-fighter-list">Clear list</button>'+
         '<button class="btn btn-ghost btn-sm" id="entrantsToggleBtn" style="width:auto;padding:4px 10px;" data-action="admin-toggle-entrants">'+(state.hideEntrants?"Show":"Hide")+'</button>'+
         '</div>'+
         '<div class="queue-scroll" id="queueBox">'+queueBoxMarkup()+'</div></aside>'+
@@ -693,7 +731,7 @@ function adminPanelMarkup(){
       '<button class="btn btn-next" data-action="admin-next-lot">Next lot</button>'+
     '</div>'+
     '<div class="admin-actions">'+
-      '<button class="btn btn-sm" data-action="toggle-registration">Open / close signups</button>'+
+      '<button class="btn btn-sm" id="registrationToggle" data-action="toggle-registration">'+(state.meta.registrationOpen?'Close captain signups':'Open captain signups')+'</button>'+
       '<button class="btn btn-danger btn-sm" data-action="admin-reset-auction">Reset entire draft</button>'+
     '</div>'+
   '</div>';
@@ -721,7 +759,7 @@ function bidderViewScreen(){
 
 function topBar(role){
   return '<header class="top"><div class="title"><div class="sigil"></div><div><h1>The Deepwoken Draft</h1>'+
-    '<div class="lot-count" id="lotCount">'+lotCountText()+'</div></div></div>'+
+    '<div class="lot-count" id="lotCount">'+lotCountText()+'</div><div id="draftStatus" class="draft-status">'+draftStatusMarkup()+'</div></div></div>'+
     '<div class="who">'+
       (role==="bidder" ? ('<span>'+esc(state.bidderName)+'</span><span class="purse" id="purseVal">'+fmt(myBudget())+' notes · '+myRosterCount()+'/12 fighters</span>') : '<span>Host</span>')+
       '<button class="btn btn-ghost btn-sm" data-action="goto-role-select">Leave</button>'+
@@ -879,6 +917,14 @@ function friendlyError(err){
  return err.message||'Could not complete that action.';
 }
 async function handleAction(action,el){
+ if(action==='remove-captain'){
+  hostRequired();const uid=el.dataset.uid,name=Object.keys(state.bidders).find(n=>state.bidders[n].uid===uid);
+  if(!name)throw Error('Captain no longer exists.');
+  if(!confirm('Remove '+name+'? Their sold fighters return to the queue, their active bids are removed, and their captain seat is freed.'))return;
+  await hostMutate((model,now)=>removeCaptainFromModel(model,uid,now));
+  try{await db.ref(ROOT+'/requests/'+uid).remove();}catch(err){showToast('Captain removed. The old signup request could not be cleared.');return;}
+  showToast('Captain removed; their fighters are available again.');return;
+ }
  if(['preview-import','apply-import','export-fighters','select-all-fighters','clear-fighter-selection','remove-fighter','remove-selected-fighters','clear-fighter-list','undo-roster-change','shuffle-queue','requeue-unsold','reopen-sale','add-round-time'].includes(action)){
   if(action==='reopen-sale'&&!confirm('Refund this sale and return the fighter to the pending queue?'))return;
   await rosterAction(action,el);return;
@@ -907,7 +953,9 @@ async function handleAction(action,el){
  }
  if(action==='signup-auctioneer'){
   if(!currentUser||!connected)throw Error('Wait for the live connection.');
-  if(!state.loaded||!state.meta.registrationOpen)throw Error('The host has not opened captain signups yet.');
+  if(!state.loaded)throw Error('The draft has not loaded yet. Check the connection and database rules.');
+  if(!state.meta.registrationOpen)throw Error('Captain signups are closed. Ask the host to open them.');
+  if(captainNames().length>=CAPTAIN_LIMIT)throw Error('All six captain seats are filled.');
   const name=document.getElementById('auctioneerNameInput').value.trim();
   if(!/^[A-Za-z0-9 _-]{1,30}$/.test(name)||['__proto__','constructor','prototype'].includes(name))throw Error('Use 1–30 letters, numbers, spaces, underscores or hyphens.');
   await db.ref(ROOT+'/requests/'+currentUser.uid).set({name,createdAt:firebase.database.ServerValue.TIMESTAMP});
@@ -1006,6 +1054,7 @@ function historyMarkup(p){
 }
 let settling=false;
 setInterval(async()=>{
+ const status=document.getElementById('draftStatus');if(status)status.innerHTML=draftStatusMarkup();
  const p=activePlayer();if(!p)return;
  const now=serverNow(),seconds=p.roundState==='running'?Math.max(0,Math.ceil((p.endsAt-now)/1000)):Math.ceil((p.remainingMs||20000)/1000);
  const sec=document.getElementById('clockSeconds'),fill=document.getElementById('clockFill'),label=document.getElementById('clockState'),clock=document.getElementById('roundClock');
