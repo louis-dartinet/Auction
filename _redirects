@@ -1,0 +1,2 @@
+/api/roblox/user/:id https://users.roblox.com/v1/users/:id 200
+/api/roblox/avatar https://thumbnails.roblox.com/v1/users/avatar-headshot 200
