@@ -13,7 +13,7 @@ Anonymous IDs belong to the browser. Clearing site data, switching browser/devic
 
 ## Running the draft
 
-Select Start / resume to open the current lot for 20 seconds. Each bid must raise the price by at least 100 notes; the initial bid may equal the opening price. Bids in the final five seconds extend the deadline to five seconds from that bid. The rules allow a 500 ms clock-offset tolerance; they reject all bids arriving after the existing deadline.
+Select Start / resume to open the current lot for 20 seconds. Each bid must raise the price by at least 100 notes; the initial bid may equal the opening price. Every bid in the final five seconds adds ten seconds to the existing deadline. This repeats whenever another bid arrives in the final five seconds. The rules allow a 500 ms clock-offset tolerance; they reject all bids arriving after the existing deadline.
 
 Keep a host dashboard open. Its timer records the winner and updates budgets using one whole-ledger Firebase transaction. If the host disconnects, the database rejects late bids at the deadline; sale settlement resumes when a host reconnects. This implementation does not include a continuously running server worker, so it does not guarantee immediate settlement while all hosts are offline or browser timers are suspended.
 
