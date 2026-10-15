@@ -1040,14 +1040,14 @@ async function submitBid(amt){
   const min=lot.highestBidder?lot.currentBid+100:Math.max(100,lot.currentBid);
   if(!Number.isSafeInteger(amt)||amt<min){reason='Minimum bid: '+fmt(min)+' whole notes.';return;}
   if(amt>mine[1].budget){reason='You only have '+fmt(mine[1].budget)+' notes left.';return;}
-  const end=Math.max(lot.endsAt,now+5000);
+  const end=lot.endsAt-now<=5000?lot.endsAt+10000:lot.endsAt;
   return {...lot,currentBid:amt,highestBidder:mine[0],highestBidderUid:currentUser.uid,endsAt:end,previousBid:lot.currentBid,previousBidder:lot.highestBidder||null,audit:(lot.audit||'')+amt+'|'+currentUser.uid+'|'+end+'\n'};
  },undefined,false);
  if(!result.committed)throw Error(reason);
  showToast('Bid accepted: '+fmt(amt)+' notes');
 }
 function clockMarkup(p){
- return '<div class="round-clock" id="roundClock"><div class="clock-head"><span id="clockState">'+esc(p.roundState||'ready')+'</span><strong id="clockSeconds">20s</strong></div><div class="clock-track"><div class="clock-fill" id="clockFill"></div></div><small>20-second rounds · late bids restore 5 seconds · minimum raise 100 notes</small></div>';
+ return '<div class="round-clock" id="roundClock"><div class="clock-head"><span id="clockState">'+esc(p.roundState||'ready')+'</span><strong id="clockSeconds">20s</strong></div><div class="clock-track"><div class="clock-fill" id="clockFill"></div></div><small>20-second rounds · bids in the last 5 seconds add 10 seconds, every time · minimum raise 100 notes</small></div>';
 }
 function historyMarkup(p){
  return '<div class="bid-history"><div class="col-heading">Bid history</div>'+((p.history||[]).slice(-6).reverse().map(b=>'<div class="history-row"><span>'+esc(b.who)+'</span><b>'+fmt(b.amount)+' notes</b></div>').join('')||'<p class="hint">Waiting for the first bid.</p>')+'</div>';
